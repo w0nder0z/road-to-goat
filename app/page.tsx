@@ -1,0 +1,746 @@
+"use client";
+
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+
+interface Exercise {
+  id: string;
+  title: string;
+  category: string;
+  subcategory?: string;
+  difficulty: string;
+  short_description: string;
+  description?: string;
+  video_url?: string;
+  prerequisite_ids?: string[];
+  muscles?: string[];
+  joints?: string[];
+}
+
+const MAIN_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie", "Dieta"];
+
+const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
+  Tricking: [
+    "Wszystkie podkategorie",
+    "Vertical Kicks (Pop, Cheat, Swing)",
+    "Backward Tricks (Backflip, Cork, Full, Gainer)",
+    "Forward Tricks (Frontflip, Webster, Janitor)",
+    "Inside Tricks (Aerial, B-kick/twist, Wrap)",
+    "Outside Tricks (Raiz, Doubleleg, Sideflip)",
+  ],
+  Plyometria: [
+    "Wszystkie partie",
+    "Staw skokowy / Ścięgno Achillesa",
+    "Moc kolana / Czworogłowy",
+    "Biodro / Pośladek (Wybicie)",
+    "Amortyzacja / Zeskok (Deceleracja)",
+  ],
+  Siła: [
+    "Wszystkie partie",
+    "Dolne partie (Nogi / Pośladki)",
+    "Górne partie (Klatka / Plecy / Barki)",
+    "Core / Antyrotacja",
+    "Siła chwytu i ramion",
+  ],
+  Rozciąganie: [
+    "Wszystkie partie",
+    "Szpagaty / Zginacze i Kulszowe",
+    "Otwarcie klatki i barków",
+    "Mobilność stawu skokowego",
+    "Mobilność bioder i miednicy",
+    "Kręgosłup (Mostki / Rotacja)",
+  ],
+  Dieta: [
+    "Wszystkie grupy",
+    "Drób / Kurczak",
+    "Mięso czerwone",
+    "Ryby / Owoce morza",
+    "Warzywa / Owoce",
+    "Węglowodany / Energia",
+    "Nawodnienie / Suplementacja",
+  ],
+};
+
+const TRICKING_LEVELS = [
+  "Wszystkie poziomy",
+  "Lvl 1: Fundamenty",
+  "Lvl 2: Baza",
+  "Lvl 3: Pojedyncze śruby",
+  "Lvl 4: Zaawansowane",
+  "Lvl 5: Master",
+  "Lvl 6: Elite",
+];
+
+const STANDARD_DIFFICULTIES = [
+  "Fundament / Wdrożenie",
+  "Średniozaawansowany",
+  "Zaawansowany / Wyczyn",
+];
+
+const COACH_PIN = "69420"; // Zmień na swój dowolny kod dostępu trenera
+
+export default function Home() {
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState("Tricking");
+  const [activeSubcategory, setActiveSubcategory] = useState("Wszystkie podkategorie");
+  const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Uprawnienia trenera
+  const [isCoach, setIsCoach] = useState(false);
+
+  // Kafelki rozwinięte
+  const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
+
+  // Modal (dodawanie i edycja)
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
+
+  // Drzewko w modalu
+  const [prereqQuery, setPrereqQuery] = useState("");
+  const [isPrereqDropdownOpen, setIsPrereqDropdownOpen] = useState(false);
+  const prereqRef = useRef<HTMLDivElement>(null);
+
+  const [formData, setFormData] = useState({
+    title: "",
+    category: "Tricking",
+    subcategory: "Vertical Kicks (Pop, Cheat, Swing)",
+    difficulty: "Lvl 1: Fundamenty",
+    short_description: "",
+    description: "",
+    videoUrl: "",
+    prerequisite_ids: [] as string[],
+  });
+
+  const fetchExercises = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("exercises")
+      .select("id, title, category, subcategory, difficulty, short_description, description, video_url, prerequisite_ids, muscles, joints")
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setExercises(data);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchExercises();
+    // Odczyt statusu trenera z sesji przeglądarki
+    const savedRole = localStorage.getItem("coach_access");
+    if (savedRole === "true") {
+      setIsCoach(true);
+    }
+  }, []);
+
+  const handleToggleCoach = () => {
+    if (isCoach) {
+      setIsCoach(false);
+      localStorage.removeItem("coach_access");
+    } else {
+      const pin = prompt("Podaj kod dostępu Trenera / Admina:");
+      if (pin === COACH_PIN) {
+        setIsCoach(true);
+        localStorage.setItem("coach_access", "true");
+      } else if (pin !== null) {
+        alert("Nieprawidłowy kod dostępu.");
+      }
+    }
+  };
+
+  const handleCategorySwitch = (category: string) => {
+    setActiveCategory(category);
+    setActiveSubcategory(SUBCATEGORIES_CONFIG[category][0]);
+    setActiveTrickingLevel("Wszystkie poziomy");
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedCardIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  // Otwarcie modalu w trybie edycji
+  const handleOpenEdit = (e: React.MouseEvent, ex: Exercise) => {
+    e.stopPropagation();
+    setEditingExerciseId(ex.id);
+    setFormData({
+      title: ex.title,
+      category: ex.category,
+      subcategory: ex.subcategory || SUBCATEGORIES_CONFIG[ex.category][1] || "",
+      difficulty: ex.difficulty,
+      short_description: ex.short_description || "",
+      description: ex.description || "",
+      videoUrl: ex.video_url || "",
+      prerequisite_ids: ex.prerequisite_ids || [],
+    });
+    setIsModalOpen(true);
+  };
+
+  // Usuwanie ćwiczenia
+  const handleDeleteExercise = async (e: React.MouseEvent, id: string, title: string) => {
+    e.stopPropagation();
+    if (!confirm(`Czy na pewno chcesz usunąć ćwiczenie "${title}" z bazy?`)) {
+      return;
+    }
+
+    const { error } = await supabase.from("exercises").delete().eq("id", id);
+    if (!error) {
+      setExercises((prev) => prev.filter((item) => item.id !== id));
+    } else {
+      alert("Błąd podczas usuwania: " + error.message);
+    }
+  };
+
+  const addPrerequisite = (id: string) => {
+    if (!formData.prerequisite_ids.includes(id)) {
+      setFormData((prev) => ({
+        ...prev,
+        prerequisite_ids: [...prev.prerequisite_ids, id],
+      }));
+    }
+    setPrereqQuery("");
+    setIsPrereqDropdownOpen(false);
+  };
+
+  const removePrerequisite = (id: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      prerequisite_ids: prev.prerequisite_ids.filter((x) => x !== id),
+    }));
+  };
+
+  const formatVideoUrl = (url: string) => {
+    if (!url) return "";
+    if (url.includes("youtube.com/watch?v=")) {
+      const videoId = url.split("v=")[1]?.split("&")[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    if (url.includes("youtu.be/")) {
+      const videoId = url.split("youtu.be/")[1]?.split("?")[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    return url;
+  };
+
+  const handleSaveExercise = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title) return;
+
+    const payload = {
+      title: formData.title,
+      category: formData.category,
+      subcategory: formData.subcategory,
+      difficulty: formData.difficulty,
+      short_description: formData.short_description,
+      description: formData.description || formData.short_description,
+      video_url: formatVideoUrl(formData.videoUrl),
+      prerequisite_ids: formData.prerequisite_ids,
+    };
+
+    if (editingExerciseId) {
+      // TRYB EDYCJI (UPDATE)
+      const { data, error } = await supabase
+        .from("exercises")
+        .update(payload)
+        .eq("id", editingExerciseId)
+        .select();
+
+      if (!error && data) {
+        setExercises((prev) =>
+          prev.map((item) => (item.id === editingExerciseId ? { ...item, ...data[0] } : item))
+        );
+        setIsModalOpen(false);
+        setEditingExerciseId(null);
+      } else if (error) {
+        alert("Błąd edycji: " + error.message);
+      }
+    } else {
+      // TRYB DODAWANIA (INSERT)
+      const { data, error } = await supabase.from("exercises").insert([payload]).select();
+
+      if (!error && data) {
+        setExercises((prev) => [data[0], ...prev]);
+        setIsModalOpen(false);
+      } else if (error) {
+        alert("Błąd zapisu: " + error.message);
+      }
+    }
+  };
+
+  const filteredList = useMemo(() => {
+    return exercises.filter((item) => {
+      if (item.category !== activeCategory) return false;
+
+      const matchesSearch =
+        item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.short_description?.toLowerCase().includes(searchTerm.toLowerCase());
+      if (!matchesSearch) return false;
+
+      const isAllSub =
+        activeSubcategory.startsWith("Wszystkie podkategorie") ||
+        activeSubcategory.startsWith("Wszystkie partie") ||
+        activeSubcategory.startsWith("Wszystkie grupy");
+      if (!isAllSub && item.subcategory && item.subcategory !== activeSubcategory) {
+        return false;
+      }
+
+      if (activeCategory === "Tricking" && activeTrickingLevel !== "Wszystkie poziomy") {
+        if (!item.difficulty?.toLowerCase().includes(activeTrickingLevel.split(":")[0].toLowerCase())) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [exercises, activeCategory, activeSubcategory, activeTrickingLevel, searchTerm]);
+
+  return (
+    <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
+      {/* Nagłówek */}
+      <header className="max-w-6xl mx-auto mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-neutral-800/80 pb-6 select-none">
+        <div className="max-w-2xl">
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-extrabold tracking-tight text-emerald-400">
+              ROAD TO GOAT
+            </h1>
+            {isCoach && (
+              <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-md">
+                Tryb Trenera
+              </span>
+            )}
+          </div>
+          <p className="text-neutral-400 text-sm mt-2 leading-relaxed">
+            Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 self-start md:self-auto">
+          {/* Przełącznik Trenera */}
+          <button
+            onClick={handleToggleCoach}
+            title={isCoach ? "Wyłącz tryb edycji trenera" : "Zaloguj się jako Trener"}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+              isCoach
+                ? "bg-neutral-800 text-emerald-400 border-emerald-500/50 hover:bg-neutral-700"
+                : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white"
+            }`}
+          >
+            {isCoach ? "🔒 Wyloguj Trenera" : "🔑 Tryb Trenera"}
+          </button>
+
+          {isCoach && (
+            <button
+              onClick={() => {
+                setEditingExerciseId(null);
+                setFormData({
+                  title: "",
+                  category: activeCategory,
+                  subcategory: SUBCATEGORIES_CONFIG[activeCategory][1] || "",
+                  difficulty: activeCategory === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
+                  short_description: "",
+                  description: "",
+                  videoUrl: "",
+                  prerequisite_ids: [],
+                });
+                setIsModalOpen(true);
+              }}
+              className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-2 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
+            >
+              + Dodaj pozycję
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Pasek głównych dyscyplin */}
+        <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none select-none border-b border-neutral-900 pb-4">
+          {MAIN_CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => handleCategorySwitch(cat)}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all cursor-pointer ${
+                activeCategory === cat
+                  ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                  : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Wyszukiwarka */}
+        <input
+          type="text"
+          placeholder={`Szukaj w sekcji ${activeCategory}...`}
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+        />
+
+        {/* Dynamiczny pasek podkategorii */}
+        <div className="space-y-3 select-none">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mr-1">
+              Podział:
+            </span>
+            {SUBCATEGORIES_CONFIG[activeCategory].map((sub) => (
+              <button
+                key={sub}
+                onClick={() => setActiveSubcategory(sub)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                  activeSubcategory === sub
+                    ? "bg-neutral-200 text-neutral-950 font-bold"
+                    : "bg-neutral-900/80 text-neutral-400 hover:text-neutral-200 border border-neutral-800"
+                }`}
+              >
+                {sub}
+              </button>
+            ))}
+          </div>
+
+          {/* Filtr poziomów dla Trickingu */}
+          {activeCategory === "Tricking" && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mr-1">
+                Poziom:
+              </span>
+              {TRICKING_LEVELS.map((lvl) => (
+                <button
+                  key={lvl}
+                  onClick={() => setActiveTrickingLevel(lvl)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-all cursor-pointer ${
+                    activeTrickingLevel === lvl
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
+                      : "bg-neutral-900/40 text-neutral-500 hover:text-neutral-300 border border-neutral-900"
+                  }`}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Siatka kafelków z items-start */}
+        {loading ? (
+          <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
+            Ładowanie bazy danych...
+          </div>
+        ) : filteredList.length === 0 ? (
+          <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
+            Brak elementów spełniających wybrane kryteria w {activeCategory}.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2 items-start">
+            {filteredList.map((item) => {
+              const isExpanded = !!expandedCardIds[item.id];
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => toggleExpand(item.id)}
+                  className={`border rounded-2xl p-5 transition-all duration-300 select-none cursor-pointer flex flex-col justify-between ${
+                    isExpanded
+                      ? "bg-neutral-900/90 border-emerald-500/60 shadow-xl shadow-emerald-950/40"
+                      : "bg-neutral-900/60 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/80"
+                  }`}
+                >
+                  {/* Stan domyślny */}
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[180px]">
+                        {item.subcategory || item.category}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-neutral-400 truncate">
+                          {item.difficulty}
+                        </span>
+                        <span
+                          className={`text-xs text-neutral-500 transition-transform duration-300 ${
+                            isExpanded ? "rotate-180 text-emerald-400" : ""
+                          }`}
+                        >
+                          ▼
+                        </span>
+                      </div>
+                    </div>
+
+                    <h3
+                      className={`text-lg font-bold transition-colors ${
+                        isExpanded ? "text-emerald-300" : "text-white"
+                      }`}
+                    >
+                      {item.title}
+                    </h3>
+                  </div>
+
+                  {/* Rozwijana sekcja */}
+                  <div
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      isExpanded
+                        ? "grid-rows-[1fr] opacity-100 mt-3 pt-3 border-t border-neutral-800/80"
+                        : "grid-rows-[0fr] opacity-0 mt-0 pt-0 border-transparent"
+                    }`}
+                  >
+                    <div className="overflow-hidden space-y-4">
+                      <p className="text-neutral-400 text-xs leading-relaxed">
+                        {item.short_description || "Brak krótkiego opisu."}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-1">
+                        {/* Przyciski trenera: Edycja i Usuwanie */}
+                        {isCoach ? (
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => handleOpenEdit(e, item)}
+                              className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-neutral-700 transition-colors"
+                              title="Edytuj pozycję"
+                            >
+                              ✏️ Edytuj
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteExercise(e, item.id, item.title)}
+                              className="text-xs bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg border border-red-900/50 transition-colors"
+                              title="Usuń pozycję z bazy"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        ) : (
+                          <div />
+                        )}
+
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Link
+                            href={`/exercise/${item.id}`}
+                            className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-4 py-2 rounded-xl shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                          >
+                            <span>Naucz się</span>
+                            <span>→</span>
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal dodawania i edycji */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-white mb-4">
+              {editingExerciseId ? "✏️ Edytuj pozycję" : "+ Dodaj nowy element"}
+            </h2>
+
+            <form onSubmit={handleSaveExercise} className="space-y-4">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">
+                  Nazwa ruchu / potrawy / ćwiczenia *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="np. Corkscrew, Przysiad bułgarski, Pierś z indyka"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Kategoria główna</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      setFormData({
+                        ...formData,
+                        category: newCat,
+                        subcategory: SUBCATEGORIES_CONFIG[newCat][1] || "",
+                        difficulty: newCat === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
+                      });
+                    }}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {MAIN_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Podkategoria / Grupa</label>
+                  <select
+                    value={formData.subcategory}
+                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {SUBCATEGORIES_CONFIG[formData.category]
+                      .filter((s) => !s.startsWith("Wszystkie"))
+                      .map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Poziom / Zaawansowanie</label>
+                <select
+                  value={formData.difficulty}
+                  onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                >
+                  {(formData.category === "Tricking"
+                    ? TRICKING_LEVELS.filter((l) => !l.startsWith("Wszystkie"))
+                    : STANDARD_DIFFICULTIES
+                  ).map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      {lvl}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-emerald-400 block mb-1 font-medium">
+                  Krótki opis (widoczny na kafelku po rozwinięciu) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Krótka zajawka widoczna na kafelku..."
+                  value={formData.short_description}
+                  onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">
+                  Szczegółowy opis i wskazówki (widoczne na podstronie)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Metodyka, błędy, technika..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Drzewko w modalu */}
+              <div ref={prereqRef} className="relative">
+                <label className="text-xs text-emerald-400 font-medium block mb-1">
+                  🌳 Wymagane fundamenty (opcjonalne)
+                </label>
+                {formData.prerequisite_ids.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {formData.prerequisite_ids.map((id) => {
+                      const ex = exercises.find((item) => item.id === id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 text-xs bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 px-2 py-0.5 rounded-lg"
+                        >
+                          <span>{ex?.title || "Element"}</span>
+                          <button
+                            type="button"
+                            onClick={() => removePrerequisite(id)}
+                            className="text-emerald-400 hover:text-white font-bold cursor-pointer ml-1"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  placeholder="Wyszukaj i dodaj wymóg..."
+                  value={prereqQuery}
+                  onFocus={() => setIsPrereqDropdownOpen(true)}
+                  onChange={(e) => {
+                    setPrereqQuery(e.target.value);
+                    setIsPrereqDropdownOpen(true);
+                  }}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+                {isPrereqDropdownOpen && (
+                  <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl z-50 p-1">
+                    {exercises
+                      .filter(
+                        (ex) =>
+                          ex.id !== editingExerciseId &&
+                          !formData.prerequisite_ids.includes(ex.id) &&
+                          ex.title.toLowerCase().includes(prereqQuery.toLowerCase())
+                      )
+                      .map((ex) => (
+                        <div
+                          key={ex.id}
+                          onClick={() => addPrerequisite(ex.id)}
+                          className="p-2 hover:bg-neutral-800 rounded-lg cursor-pointer text-xs flex justify-between"
+                        >
+                          <span>{ex.title}</span>
+                          <span className="text-[10px] text-neutral-400">{ex.category}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">
+                  Link wideo / źródło
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={formData.videoUrl}
+                  onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingExerciseId(null);
+                  }}
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
+                >
+                  {editingExerciseId ? "Zapisz zmiany" : "Dodaj"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
