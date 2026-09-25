@@ -109,7 +109,7 @@ const STANDARD_DIFFICULTIES = [
 ];
 
 const TEAM_PASSWORD = "Kawashi2026";
-const COACH_PIN = "69420";
+const COACH_PIN = "1234";
 
 const HERO_IMAGES = [
   "/hero/hero1.jpg",
@@ -242,7 +242,7 @@ export default function Home() {
       }
     } else {
       if (authPassword !== TEAM_PASSWORD) {
-        alert("Błędne hasło drużyny (wpisz: Kawashi2026)!");
+        alert("Błędne hasło drużyny!");
         return;
       }
     }
@@ -416,9 +416,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
-      {/* SEKCJA HERO BANNER */}
+      {/* SEKCJA HERO */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
-        {/* Zdjęcia z karuzeli */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {HERO_IMAGES.map((src, idx) => (
             <div
@@ -434,12 +433,11 @@ export default function Home() {
               />
             </div>
           ))}
-          {/* Cieniowanie tła dla czytelności tekstu */}
           <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/70 to-neutral-950/30" />
         </div>
 
         <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-8 pb-10 flex flex-col justify-between min-h-[320px]">
-          {/* Górna belka */}
+          {/* Top Bar */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase tracking-widest font-extrabold text-emerald-400 bg-neutral-900/90 border border-emerald-500/40 px-3 py-1 rounded-full shadow">
@@ -492,7 +490,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Przywrócona oryginalna treść nagłówka */}
+          {/* Oryginalny tekst nagłówka */}
           <div className="my-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
             <div className="lg:col-span-2">
               <h1 className="text-3xl md:text-5xl font-black tracking-tight text-emerald-400 drop-shadow-md">
@@ -503,7 +501,7 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Karta zawodów */}
+            {/* Karta celów startowych */}
             <div className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
               <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
                 <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -545,7 +543,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Przyciski operacyjne */}
+          {/* Przyciski akcji */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div className="flex flex-wrap items-center gap-2.5">
               <button
@@ -619,12 +617,14 @@ export default function Home() {
           ))}
         </div>
 
+        {/* Wyszukiwarka z przywróconym placeholderem */}
         <input
-  type="text"
-  value={searchTerm}
-  onChange={(e) => setSearchTerm(e.target.value)}
-  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-/>
+          type="text"
+          placeholder="Szukaj tricku, ćwiczenia, elementu..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+        />
 
         {activeCategory !== "Własne treningi" && (
           <div className="space-y-3 select-none">
@@ -835,12 +835,12 @@ export default function Home() {
 
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">
-                  {authIsCoach ? "PIN Trenera (Admin)" : "Hasło Drużyny (Kawashi2026)"} *
+                  {authIsCoach ? "PIN Trenera (Admin) *" : "Hasło Drużyny *"}
                 </label>
                 <input
                   type="password"
                   required
-                  placeholder={authIsCoach ? "Wpisz PIN..." : "Wpisz hasło..."}
+                  placeholder={authIsCoach ? "PIN..." : "Hasło..."}
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
