@@ -20,10 +20,10 @@ export default function TimelinePage() {
   const [submissions, setSubmissions] = useState<ProgressItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Status profilu i uprawnień
+  // Status profilu
   const [currentUser, setCurrentUser] = useState<{ username: string; role: "athlete" | "coach" } | null>(null);
 
-  // Modal (dodawanie i edycja)
+  // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -60,10 +60,8 @@ export default function TimelinePage() {
   };
 
   useEffect(() => {
-    // 1. Zapisanie czasu wejścia – natychmiast gasi czerwoną kropkę na stronie głównej
     localStorage.setItem("timeline_last_read", Date.now().toString());
 
-    // 2. Odczyt zalogowanego profilu
     const savedUserStr = localStorage.getItem("goat_athlete_profile");
     if (savedUserStr) {
       try {
@@ -97,31 +95,22 @@ export default function TimelinePage() {
 
   const formatVideoUrl = (url: string) => {
     if (!url) return "";
-
-    // Google Drive
     if (url.includes("drive.google.com/file/d/")) {
       const fileId = url.split("/d/")[1]?.split("/")[0];
       return `https://drive.google.com/file/d/${fileId}/preview`;
     }
-
-    // YouTube Shorts
     if (url.includes("youtube.com/shorts/")) {
       const videoId = url.split("shorts/")[1]?.split("?")[0];
       return `https://www.youtube.com/embed/${videoId}`;
     }
-
-    // YouTube standard
     if (url.includes("youtube.com/watch?v=")) {
       const videoId = url.split("v=")[1]?.split("&")[0];
       return `https://www.youtube.com/embed/${videoId}`;
     }
-
-    // YouTube youtu.be
     if (url.includes("youtu.be/")) {
       const videoId = url.split("youtu.be/")[1]?.split("?")[0];
       return `https://www.youtube.com/embed/${videoId}`;
     }
-
     return url;
   };
 
@@ -174,8 +163,6 @@ export default function TimelinePage() {
         );
         setIsModalOpen(false);
         setEditingId(null);
-      } else if (error) {
-        alert("Błąd zapisu zmian: " + error.message);
       }
     } else {
       const { data, error } = await supabase
@@ -191,8 +178,6 @@ export default function TimelinePage() {
           video_url: "",
           notes: "",
         }));
-      } else if (error) {
-        alert("Błąd dodawania: " + error.message);
       }
     }
   };
@@ -201,20 +186,40 @@ export default function TimelinePage() {
     if (!confirm(`Czy na pewno usunąć nagranie zawodnika "${athlete}"?`)) {
       return;
     }
-
     const { error } = await supabase.from("progress_submissions").delete().eq("id", id);
-
     if (!error) {
       setSubmissions((prev) => prev.filter((item) => item.id !== id));
-    } else {
-      alert("Błąd podczas usuwania: " + error.message);
     }
   };
+
+  // EKRAN BLOKADY DLA NIEZALOGOWANYCH
+  if (!currentUser) {
+    return (
+      <main className="min-h-screen bg-neutral-950 text-neutral-100 p-6 flex flex-col items-center justify-center">
+        <div className="max-w-md w-full bg-neutral-900/90 border border-neutral-800 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center text-3xl mx-auto">
+            🔒
+          </div>
+          <h1 className="text-2xl font-black text-white">Strona tylko dla zalogowanych</h1>
+          <p className="text-xs text-neutral-400 leading-relaxed">
+            Oś czasu i feed postępów z sali treningowej są dostępne wyłącznie dla członków drużyny Road to GOAT.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/"
+              className="inline-block bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20"
+            >
+              ← Wróć na stronę główną i zaloguj się
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Nawigacja powrotu i panel akcji */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800/80 pb-4 select-none">
           <Link
             href="/"
@@ -225,7 +230,6 @@ export default function TimelinePage() {
           </Link>
 
           <div className="flex items-center gap-2.5">
-            {/* Przełącznik Trenera */}
             <button
               onClick={handleToggleCoach}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
@@ -246,7 +250,6 @@ export default function TimelinePage() {
           </div>
         </div>
 
-        {/* Tytuł */}
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-extrabold text-white flex items-center gap-2">
@@ -263,7 +266,6 @@ export default function TimelinePage() {
           </p>
         </div>
 
-        {/* Lista wideo w osi czasu */}
         {loading ? (
           <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
             Ładowanie feedu nagrań...
@@ -301,7 +303,6 @@ export default function TimelinePage() {
                       🎯 {sub.exercise_title}
                     </span>
 
-                    {/* Narzędzia Trenera */}
                     {currentUser?.role === "coach" && (
                       <div className="flex items-center gap-1.5 ml-2">
                         <button
@@ -323,7 +324,6 @@ export default function TimelinePage() {
                   </div>
                 </div>
 
-                {/* Odtwarzacz wideo */}
                 {sub.video_url && (
                   <div className="space-y-2">
                     <div className="rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800">
@@ -361,7 +361,6 @@ export default function TimelinePage() {
         )}
       </div>
 
-      {/* Modal dodawania i edycji */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
@@ -417,9 +416,6 @@ export default function TimelinePage() {
                   onChange={(e) => setForm({ ...form, video_url: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
-                <p className="text-[11px] text-neutral-500 mt-1 leading-normal">
-                  💡 <strong>Wskazówka:</strong> W Dysku Google wybierz <em>„Każda osoba mająca link”</em>. Na YouTube film może być <strong>Niepubliczny (Unlisted)</strong>.
-                </p>
               </div>
 
               <div>

@@ -23,6 +23,7 @@ interface Workout {
   description: string;
   level: string;
   exercise_ids: string[];
+  author_username?: string;
   created_at: string;
 }
 
@@ -159,12 +160,10 @@ export default function Home() {
 
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
-  // Modale
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
 
-  // Inteligentny Kreator Treningu
   const [workoutForm, setWorkoutForm] = useState({
     title: "",
     description: "",
@@ -348,6 +347,10 @@ export default function Home() {
       const fileId = url.split("/d/")[1]?.split("/")[0];
       return `https://drive.google.com/file/d/${fileId}/preview`;
     }
+    if (url.includes("open.spotify.com/playlist/")) {
+      const playlistId = url.split("playlist/")[1]?.split("?")[0];
+      return `https://open.spotify.com/embed/playlist/${playlistId}?utm_source=generator&theme=0`;
+    }
     return url;
   };
 
@@ -364,12 +367,12 @@ export default function Home() {
       title: formData.title,
       category: formData.category,
       subcategory: formData.subcategory,
-      difficulty: formData.difficulty,
+      difficulty: formData.category === "Muzyka" ? "Playlista" : formData.difficulty,
       short_description: formData.short_description,
-      description: formData.description || formData.short_description,
+      description: formData.category === "Muzyka" ? "" : (formData.description || formData.short_description),
       sources: formattedSources,
       video_url: formattedSources[0] || "",
-      prerequisite_ids: formData.prerequisite_ids,
+      prerequisite_ids: formData.category === "Muzyka" ? [] : formData.prerequisite_ids,
     };
 
     if (editingExerciseId) {
@@ -395,12 +398,10 @@ export default function Home() {
     }
   };
 
-  // Zapisywanie ustrukturyzowanego treningu
   const handleSaveStructuredWorkout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!workoutForm.title) return;
+    if (!workoutForm.title || !currentUser) return;
 
-    // Łączymy ćwiczenia w kolejności metodycznej: Rozgrzewka -> Siła/Plyo -> Skill -> Cool-down
     const combinedIds = [
       ...workoutForm.warmup_ids,
       ...workoutForm.strength_ids,
@@ -413,6 +414,7 @@ export default function Home() {
       description: workoutForm.description,
       level: workoutForm.level,
       exercise_ids: combinedIds,
+      author_username: currentUser.username,
     };
 
     const { data, error } = await supabase.from("workouts").insert([payload]).select();
@@ -432,6 +434,14 @@ export default function Home() {
       setActiveCategory("Własne treningi");
     } else if (error) {
       alert("Błąd: " + error.message);
+    }
+  };
+
+  const handleDeleteWorkout = async (id: string, title: string) => {
+    if (!confirm(`Czy na pewno chcesz usunąć trening "${title}"?`)) return;
+    const { error } = await supabase.from("workouts").delete().eq("id", id);
+    if (!error) {
+      setWorkouts((prev) => prev.filter((w) => w.id !== id));
     }
   };
 
@@ -473,6 +483,13 @@ export default function Home() {
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }, [nextCompetition]);
 
+  // Filtrowanie treningów: każdy widzi TYLKO swoje treningi (Trener widzi wszystkie)
+  const visibleWorkouts = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === "coach") return workouts;
+    return workouts.filter((w) => w.author_username === currentUser.username);
+  }, [workouts, currentUser]);
+
   const filteredList = useMemo(() => {
     return exercises.filter((item) => {
       if (item.category !== activeCategory) return false;
@@ -499,14 +516,14 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
-      {/* SEKCJA HERO - POWIĘKSZONA NA ZDJĘCIA */}
+      {/* SEKCJA HERO BANNER */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {HERO_IMAGES.map((src, idx) => (
             <div
               key={idx}
               className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                idx === currentHeroIdx ? "opacity-70" : "opacity-0"
+                idx === currentHeroIdx ? "opacity-75" : "opacity-0"
               }`}
             >
               <img
@@ -516,66 +533,89 @@ export default function Home() {
               />
             </div>
           ))}
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/65 to-neutral-950/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/60 to-neutral-950/30" />
         </div>
 
-        {/* Zwiększona minimalna wysokość sekcji hero (min-h-[460px] md:min-h-[520px]) */}
-        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-8 pb-10 flex flex-col justify-between min-h-[460px] md:min-h-[520px]">
-          {/* Top Bar: Prawy róg z Timeline i Logowaniem */}
-          <div className="flex items-center justify-end gap-3 w-full">
-            <Link
-              href="/timeline"
-              className="relative flex items-center gap-2 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 hover:border-emerald-500/50 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all shadow-md active:scale-95"
-            >
-              <span>🎬 Timeline</span>
-              {currentUser && hasNewTimelinePosts && (
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                </span>
-              )}
-            </Link>
-
+        {/* Wysokość sekcji hero */}
+        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-6 pb-10 flex flex-col justify-between min-h-[480px] md:min-h-[540px]">
+          
+          {/* UKŁAD TOP BAR */}
+          <div className="flex items-start justify-between gap-4 w-full">
+            {/* DLA NIEZALOGOWANEGO: TYTUŁ I OPIS PRZESUNIĘTE W LEWY GÓRNY RÓG */}
             {!currentUser ? (
-              <button
-                onClick={() => {
-                  setAuthMode("login");
-                  setIsAuthModalOpen(true);
-                }}
-                className="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-xs px-3 py-1.5 rounded-xl text-neutral-300 hover:text-white transition-all cursor-pointer"
-              >
-                👤 Zaloguj / Rejestracja
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-emerald-400 font-semibold bg-neutral-900/80 border border-neutral-800 px-2.5 py-1 rounded-xl">
-                  {currentUser.username} {currentUser.role === "coach" && "(Admin)"}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="bg-neutral-900/90 hover:bg-red-950/50 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1 rounded-xl text-neutral-400 hover:text-red-300 transition-all cursor-pointer"
-                >
-                  Wyloguj
-                </button>
+              <div className="max-w-md bg-neutral-950/70 p-4 rounded-2xl backdrop-blur-md border border-neutral-800/80 shadow-2xl">
+                <div className="inline-block border border-neutral-700/80 bg-neutral-900/90 rounded-xl px-4 py-2 shadow-lg mb-2.5">
+                  <h1 className="text-2xl md:text-3xl font-black tracking-tight text-emerald-400 uppercase">
+                    ROAD TO GOAT
+                  </h1>
+                </div>
+                <p className="text-neutral-300 text-xs leading-relaxed">
+                  Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
+                </p>
               </div>
+            ) : (
+              <div /> // Puste miejsce dla zalogowanego, który ma tytuł niżej
             )}
+
+            {/* PRAWY RÓG: WIĘKSZE IKONY TIMELINE I LOGOWANIA DLA ZALOGOWANEGO */}
+            <div className="flex items-center gap-3 ml-auto">
+              <Link
+                href="/timeline"
+                className={`relative flex items-center gap-2.5 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 hover:border-emerald-500/60 rounded-2xl shadow-xl transition-all active:scale-95 ${
+                  currentUser ? "px-5 py-2.5 text-sm font-bold" : "px-3.5 py-1.5 text-xs font-medium"
+                }`}
+              >
+                <span className={currentUser ? "text-lg" : "text-sm"}>🎬</span>
+                <span>Timeline</span>
+                {currentUser && hasNewTimelinePosts && (
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                  </span>
+                )}
+              </Link>
+
+              {!currentUser ? (
+                <button
+                  onClick={() => {
+                    setAuthMode("login");
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-xs px-4 py-2 rounded-xl text-neutral-300 hover:text-white transition-all cursor-pointer"
+                >
+                  👤 Zaloguj / Rejestracja
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 bg-neutral-900/90 border border-neutral-700/80 p-1.5 rounded-2xl shadow-xl">
+                  <span className="text-sm text-emerald-400 font-bold px-3 py-1 bg-neutral-950/80 border border-neutral-800 rounded-xl">
+                    👤 {currentUser.username} {currentUser.role === "coach" && "(Admin)"}
+                  </span>
+                  <button
+                    onClick={handleLogout}
+                    className="bg-neutral-900 hover:bg-red-950/60 border border-neutral-800 hover:border-red-800 text-xs px-3 py-1.5 rounded-xl text-neutral-400 hover:text-red-300 transition-all cursor-pointer font-medium"
+                  >
+                    Wyloguj
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Centralny blok: Jeden dopracowany nagłówek w szarej ramce + Kalendarz tylko dla zalogowanych */}
-          <div className="my-auto py-8 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
-            <div className="lg:col-span-2">
-              <div className="inline-block bg-neutral-900/80 backdrop-blur-md border border-neutral-700/80 rounded-2xl px-5 py-3 shadow-xl mb-3">
-                <h1 className="text-3xl md:text-5xl font-black tracking-tight text-emerald-400 uppercase">
-                  ROAD TO GOAT
-                </h1>
+          {/* DLA ZALOGOWANEGO: TYTUŁ I KALENDARZ W GŁÓWNEJ CZĘŚCI */}
+          {currentUser && (
+            <div className="my-auto py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
+              <div className="lg:col-span-2">
+                <div className="inline-block bg-neutral-900/80 backdrop-blur-md border border-neutral-700/80 rounded-2xl px-5 py-3 shadow-xl mb-3">
+                  <h1 className="text-3xl md:text-5xl font-black tracking-tight text-emerald-400 uppercase">
+                    ROAD TO GOAT
+                  </h1>
+                </div>
+                <p className="text-neutral-200 text-xs md:text-sm max-w-xl leading-relaxed drop-shadow bg-neutral-950/50 p-3.5 rounded-xl backdrop-blur-sm border border-neutral-800/40">
+                  Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
+                </p>
               </div>
-              <p className="text-neutral-200 text-xs md:text-sm max-w-xl leading-relaxed drop-shadow bg-neutral-950/40 p-3 rounded-xl backdrop-blur-sm border border-neutral-800/40">
-                Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
-              </p>
-            </div>
 
-            {/* CEL STARTOWY - WIDOCZNY TYLKO DLA ZALOGOWANYCH */}
-            {currentUser && (
+              {/* CEL STARTOWY */}
               <div className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
                 <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
                   <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -615,10 +655,10 @@ export default function Home() {
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* PRZYCISKI AKCJI - WIDOCZNE TYLKO DLA ZALOGOWANYCH */}
+          {/* PRZYCISKI AKCJI (TYLKO DLA ZALOGOWANYCH) */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2.5">
@@ -660,7 +700,6 @@ export default function Home() {
               <div />
             )}
 
-            {/* Wskaźnik karuzeli */}
             <div className="hidden sm:flex items-center gap-1.5 opacity-60">
               {HERO_IMAGES.map((_, i) => (
                 <div
@@ -749,15 +788,19 @@ export default function Home() {
           </div>
         )}
 
-        {/* WIDOK DLA ZAKŁADKI WŁASNE TRENINGI */}
+        {/* WIDOK DLA ZAKŁADKI WŁASNE TRENINGI (ODSEPAROWANE KONTA) */}
         {activeCategory === "Własne treningi" ? (
-          workouts.length === 0 ? (
+          !currentUser ? (
             <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
-              Brak utworzonych treningów. Kliknij u góry <strong>„Stwórz Trening”</strong>, aby skomponować jednostkę!
+              Zaloguj się, aby tworzyć i przeglądać swoje własne plany treningowe.
+            </div>
+          ) : visibleWorkouts.length === 0 ? (
+            <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
+              Nie masz jeszcze zapisanych treningów. Kliknij u góry <strong>„Stwórz Trening”</strong>!
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-              {workouts.map((wo) => {
+              {visibleWorkouts.map((wo) => {
                 const includedExercises = exercises.filter((ex) =>
                   wo.exercise_ids?.includes(ex.id)
                 );
@@ -770,9 +813,18 @@ export default function Home() {
                       <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
                         {wo.level}
                       </span>
-                      <span className="text-xs text-neutral-500 font-mono">
-                        {wo.exercise_ids?.length || 0} ćwiczeń w jednostce
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-neutral-500 font-mono">
+                          {wo.exercise_ids?.length || 0} ćwiczeń
+                        </span>
+                        <button
+                          onClick={() => handleDeleteWorkout(wo.id, wo.title)}
+                          className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5 bg-red-950/40 border border-red-900/50 rounded-md cursor-pointer"
+                          title="Usuń trening"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
 
                     <div>
@@ -949,13 +1001,13 @@ export default function Home() {
         )}
       </div>
 
-      {/* INTELIGENTNY KREATOR TRENINGU Z METODYKĄ */}
+      {/* MODAL KREATORA TRENINGU */}
       {isWorkoutModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-white mb-1">🏋️ Inteligentny Kreator Treningu</h2>
+            <h2 className="text-xl font-bold text-white mb-1">🏋️ Stwórz Własny Trening</h2>
             <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Skomponuj kompletną jednostkę w oparciu o periodyzację: aktywacja stawów $\rightarrow$ wzmocnienie siłowe/plyometryczne $\rightarrow$ główny trick $\rightarrow$ rozciąganie.
+              Skomponuj jednostkę widoczną wyłącznie na Twoim koncie.
             </p>
 
             <form onSubmit={handleSaveStructuredWorkout} className="space-y-4">
@@ -965,7 +1017,7 @@ export default function Home() {
                   <input
                     type="text"
                     required
-                    placeholder="np. Skoczność + Nauka Cheat 720"
+                    placeholder="np. Przygotowanie bioder + Tricking"
                     value={workoutForm.title}
                     onChange={(e) => setWorkoutForm({ ...workoutForm, title: e.target.value })}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -989,18 +1041,18 @@ export default function Home() {
                 <label className="text-xs text-neutral-400 block mb-1">Krótki opis jednostki</label>
                 <textarea
                   rows={2}
-                  placeholder="np. Przygotowanie stawów skokowych i bioder pod rotację..."
+                  placeholder="np. Skupienie na amortyzacji i płynności wybicia..."
                   value={workoutForm.description}
                   onChange={(e) => setWorkoutForm({ ...workoutForm, description: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              {/* BLOK 1: ROZGRZEWKA & AKTYWACJA */}
+              {/* KROK 1: MOBILNOŚĆ */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🔥</span> Krok 1: Rozgrzewka & Mobilność stawów
+                    <span>🔥</span> Krok 1: Rozgrzewka & Mobilność
                   </span>
                   <span className="text-[11px] text-neutral-500">
                     Wybrano: {workoutForm.warmup_ids.length}
@@ -1029,7 +1081,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* BLOK 2: PRZYGOTOWANIE MOTORYCZNE */}
+              {/* KROK 2: WZMOCNIENIE */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -1062,11 +1114,11 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* BLOK 3: GŁÓWNA CZĘŚĆ TECHNICZNA */}
+              {/* KROK 3: GŁÓWNY TRICK */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🎯</span> Krok 3: Część Główna (Tricking & Skill)
+                    <span>🎯</span> Krok 3: Część Główna (Tricking)
                   </span>
                   <span className="text-[11px] text-neutral-500">
                     Wybrano: {workoutForm.skill_ids.length}
@@ -1095,11 +1147,11 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* BLOK 4: REGENERACJA & ROZCIĄGANIE */}
+              {/* KROK 4: ROZCIĄGANIE */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-teal-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🧘</span> Krok 4: Cool-down & Sugerowane Rozciąganie
+                    <span>🧘</span> Krok 4: Cool-down & Rozciąganie
                   </span>
                   <span className="text-[11px] text-neutral-500">
                     Wybrano: {workoutForm.cooldown_ids.length}
@@ -1140,7 +1192,192 @@ export default function Home() {
                   type="submit"
                   className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-5 py-2 rounded-xl text-sm transition-all"
                 >
-                  Zapisz Trening
+                  Zapisz Mój Trening
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DODAWANIA POZYCJI (Z UPROSZCZENIEM DLA KATEGORII MUZYKA) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-white mb-4">
+              {editingExerciseId 
+                ? "✏️ Edytuj pozycję" 
+                : formData.category === "Muzyka" 
+                  ? "🎵 Dodaj Playlistę Muzyczną" 
+                  : "+ Dodaj nowy element"}
+            </h2>
+
+            <form onSubmit={handleSaveExercise} className="space-y-4">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">
+                  {formData.category === "Muzyka" ? "Nazwa Playlisty *" : "Nazwa *"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={formData.category === "Muzyka" ? "np. Battle Hype Beats 2026" : "np. Corkscrew, B-twist"}
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Kategoria</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      setFormData({
+                        ...formData,
+                        category: newCat,
+                        subcategory: SUBCATEGORIES_CONFIG[newCat][1] || "",
+                        difficulty: newCat === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
+                      });
+                    }}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {MAIN_CATEGORIES.filter((c) => c !== "Własne treningi").map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">
+                    {formData.category === "Muzyka" ? "Gatunek muzyki" : "Podkategoria"}
+                  </label>
+                  <select
+                    value={formData.subcategory}
+                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {SUBCATEGORIES_CONFIG[formData.category]
+                      ?.filter((s) => !s.startsWith("Wszystkie"))
+                      .map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* DLA MUZYKI: UKRYTO POZIOM TRUDNOŚCI */}
+              {formData.category !== "Muzyka" && (
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Poziom</label>
+                  <select
+                    value={formData.difficulty}
+                    onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {(formData.category === "Tricking"
+                      ? TRICKING_LEVELS.filter((l) => !l.startsWith("Wszystkie"))
+                      : STANDARD_DIFFICULTIES
+                    ).map((lvl) => (
+                      <option key={lvl} value={lvl}>
+                        {lvl}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs text-emerald-400 block mb-1 font-medium">
+                  {formData.category === "Muzyka" ? "Krótki opis / Klimat playlisty *" : "Krótki opis *"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={formData.category === "Muzyka" ? "np. Szybki beat, idealny pod sekwencje i walki" : "Krótki opis..."}
+                  value={formData.short_description}
+                  onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* DLA MUZYKI: UKRYTO WSKAZÓWKI METODYCZNE */}
+              {formData.category !== "Muzyka" && (
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Wskazówki metodyczne</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Technika, błędy..."
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              )}
+
+              {/* LINKI / ŹRÓDŁA */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-emerald-400 font-medium">
+                    {formData.category === "Muzyka" 
+                      ? "🔗 Link do Playlisty (Spotify lub YouTube)" 
+                      : "🔗 Źródła wideo (YouTube, Shorts, Dysk Google)"}
+                  </label>
+                  {formData.category !== "Muzyka" && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData((p) => ({ ...p, sources: [...p.sources, ""] }))}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
+                    >
+                      + Dodaj kolejne wideo
+                    </button>
+                  )}
+                </div>
+
+                {formData.sources.map((s, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder={formData.category === "Muzyka" ? "https://open.spotify.com/playlist/..." : `Link wideo #${idx + 1}`}
+                      value={s}
+                      onChange={(e) => {
+                        const newS = [...formData.sources];
+                        newS[idx] = e.target.value;
+                        setFormData({ ...formData, sources: newS });
+                      }}
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                    {formData.sources.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((p) => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
+                        className="text-neutral-500 hover:text-red-400 text-sm px-2 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
+                >
+                  {editingExerciseId ? "Zapisz zmiany" : "Dodaj"}
                 </button>
               </div>
             </form>
@@ -1297,170 +1534,6 @@ export default function Home() {
                   className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all cursor-pointer"
                 >
                   Zapisz
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DODAWANIA POZYCJI */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-white mb-4">
-              {editingExerciseId ? "✏️ Edytuj pozycję" : "+ Dodaj nowy element"}
-            </h2>
-
-            <form onSubmit={handleSaveExercise} className="space-y-4">
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Nazwa *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="np. Corkscrew, B-twist"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Kategoria</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => {
-                      const newCat = e.target.value;
-                      setFormData({
-                        ...formData,
-                        category: newCat,
-                        subcategory: SUBCATEGORIES_CONFIG[newCat][1] || "",
-                        difficulty: newCat === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
-                      });
-                    }}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    {MAIN_CATEGORIES.filter((c) => c !== "Własne treningi").map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Podkategoria</label>
-                  <select
-                    value={formData.subcategory}
-                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    {SUBCATEGORIES_CONFIG[formData.category]
-                      ?.filter((s) => !s.startsWith("Wszystkie"))
-                      .map((sub) => (
-                        <option key={sub} value={sub}>
-                          {sub}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Poziom</label>
-                <select
-                  value={formData.difficulty}
-                  onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                >
-                  {(formData.category === "Tricking"
-                    ? TRICKING_LEVELS.filter((l) => !l.startsWith("Wszystkie"))
-                    : STANDARD_DIFFICULTIES
-                  ).map((lvl) => (
-                    <option key={lvl} value={lvl}>
-                      {lvl}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-emerald-400 block mb-1 font-medium">Krótki opis *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Krótki opis..."
-                  value={formData.short_description}
-                  onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Wskazówki metodyczne</label>
-                <textarea
-                  rows={2}
-                  placeholder="Technika, błędy..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-emerald-400 font-medium">
-                    🔗 Źródła wideo (YouTube, Shorts, Dysk Google)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setFormData((p) => ({ ...p, sources: [...p.sources, ""] }))}
-                    className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
-                  >
-                    + Dodaj kolejne wideo
-                  </button>
-                </div>
-
-                {formData.sources.map((s, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder={`Link wideo #${idx + 1}`}
-                      value={s}
-                      onChange={(e) => {
-                        const newS = [...formData.sources];
-                        newS[idx] = e.target.value;
-                        setFormData({ ...formData, sources: newS });
-                      }}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                    />
-                    {formData.sources.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData((p) => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
-                        className="text-neutral-500 hover:text-red-400 text-sm px-2 cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
-                >
-                  Anuluj
-                </button>
-                <button
-                  type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
-                >
-                  {editingExerciseId ? "Zapisz zmiany" : "Dodaj"}
                 </button>
               </div>
             </form>
