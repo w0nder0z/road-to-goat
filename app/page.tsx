@@ -110,7 +110,7 @@ const STANDARD_DIFFICULTIES = [
   "Zaawansowany / Wyczyn",
 ];
 
-const COACH_PIN = "1234";
+const COACH_PIN = "69420";
 
 export default function Home() {
   const [exercises, setExercises] = useState<Exercise[]>([]);

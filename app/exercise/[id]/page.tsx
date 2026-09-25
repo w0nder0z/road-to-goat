@@ -24,6 +24,14 @@ interface MiniExercise {
   difficulty: string;
 }
 
+interface ProgressSubmission {
+  id: string;
+  athlete_name: string;
+  video_url: string;
+  notes: string;
+  created_at: string;
+}
+
 export default function ExerciseDetailPage() {
   const params = useParams();
   const id = params?.id as string;
@@ -31,60 +39,122 @@ export default function ExerciseDetailPage() {
   const [exercise, setExercise] = useState<ExerciseDetail | null>(null);
   const [prerequisites, setPrerequisites] = useState<MiniExercise[]>([]);
   const [unlockedTricks, setUnlockedTricks] = useState<MiniExercise[]>([]);
+  const [submissions, setSubmissions] = useState<ProgressSubmission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Modal dodawania próby wideo
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [form, setForm] = useState({
+    athlete_name: "",
+    video_url: "",
+    notes: "",
+  });
+
+  const formatVideoUrl = (url: string) => {
+    if (!url) return "";
+    if (url.includes("youtube.com/watch?v=")) {
+      const videoId = url.split("v=")[1]?.split("&")[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    if (url.includes("youtu.be/")) {
+      const videoId = url.split("youtu.be/")[1]?.split("?")[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    if (url.includes("youtube.com/shorts/")) {
+      const videoId = url.split("shorts/")[1]?.split("?")[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    return url;
+  };
+
+  const fetchDetailAndTree = async () => {
     if (!id) return;
+    setLoading(true);
 
-    const fetchDetailAndTree = async () => {
-      setLoading(true);
+    // 1. Pobierz dane ćwiczenia
+    const { data: currentEx, error } = await supabase
+      .from("exercises")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-      // 1. Pobierz dane bieżącego ćwiczenia
-      const { data: currentEx, error } = await supabase
-        .from("exercises")
-        .select("*")
-        .eq("id", id)
-        .single();
+    if (error || !currentEx) {
+      setLoading(false);
+      return;
+    }
 
-      if (error || !currentEx) {
-        setLoading(false);
-        return;
-      }
+    setExercise(currentEx);
 
-      setExercise(currentEx);
-
-      // 2. Pobierz Wymagania wstępne (Prerequisites)
-      if (currentEx.prerequisite_ids && currentEx.prerequisite_ids.length > 0) {
-        const { data: prereqData } = await supabase
-          .from("exercises")
-          .select("id, title, difficulty")
-          .in("id", currentEx.prerequisite_ids);
-
-        if (prereqData) setPrerequisites(prereqData);
-      } else {
-        setPrerequisites([]);
-      }
-
-      // 3. Pobierz Odblokowywane tricki (Co ten trick odblokowuje dalej w drzewku)
-      const { data: unlockedData } = await supabase
+    // 2. Pobierz Wymagania wstępne (Prerequisites)
+    if (currentEx.prerequisite_ids && currentEx.prerequisite_ids.length > 0) {
+      const { data: prereqData } = await supabase
         .from("exercises")
         .select("id, title, difficulty")
-        .contains("prerequisite_ids", [id]);
+        .in("id", currentEx.prerequisite_ids);
 
-      if (unlockedData) {
-        setUnlockedTricks(unlockedData);
-      }
+      if (prereqData) setPrerequisites(prereqData);
+    } else {
+      setPrerequisites([]);
+    }
 
-      setLoading(false);
-    };
+    // 3. Pobierz Odblokowywane tricki
+    const { data: unlockedData } = await supabase
+      .from("exercises")
+      .select("id, title, difficulty")
+      .contains("prerequisite_ids", [id]);
 
+    if (unlockedData) {
+      setUnlockedTricks(unlockedData);
+    }
+
+    // 4. Pobierz próby wideo powiązane ściśle z tym trickiem
+    const { data: subsData } = await supabase
+      .from("progress_submissions")
+      .select("id, athlete_name, video_url, notes, created_at")
+      .eq("exercise_id", id)
+      .order("created_at", { ascending: false });
+
+    if (subsData) {
+      setSubmissions(subsData);
+    }
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchDetailAndTree();
   }, [id]);
+
+  const handleAddSubmission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.athlete_name || !form.video_url || !exercise) return;
+
+    const payload = {
+      athlete_name: form.athlete_name,
+      exercise_id: exercise.id,
+      exercise_title: exercise.title,
+      video_url: formatVideoUrl(form.video_url),
+      notes: form.notes,
+    };
+
+    const { data, error } = await supabase
+      .from("progress_submissions")
+      .insert([payload])
+      .select();
+
+    if (!error && data) {
+      setSubmissions((prev) => [data[0], ...prev]);
+      setIsModalOpen(false);
+      setForm({ athlete_name: "", video_url: "", notes: "" });
+    } else if (error) {
+      alert("Błąd: " + error.message);
+    }
+  };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-400 flex items-center justify-center text-sm animate-pulse">
-        Budowanie drzewka progresji...
+        Budowanie podglądu...
       </div>
     );
   }
@@ -106,14 +176,23 @@ export default function ExerciseDetailPage() {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Nawigacja powrotu */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-sm text-neutral-400 hover:text-emerald-400 transition-colors select-none"
-        >
-          <span>←</span>
-          <span>Wróć do bazy</span>
-        </Link>
+        {/* Nawigacja */}
+        <div className="flex items-center justify-between select-none">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm text-neutral-400 hover:text-emerald-400 transition-colors"
+          >
+            <span>←</span>
+            <span>Wróć do bazy ROAD TO GOAT</span>
+          </Link>
+
+          <Link
+            href="/timeline"
+            className="text-xs text-neutral-400 hover:text-emerald-400 transition-colors"
+          >
+            🎬 Otwórz globalny Timeline →
+          </Link>
+        </div>
 
         {/* Główna karta ćwiczenia */}
         <div className="bg-neutral-900/60 border border-neutral-800 rounded-3xl p-6 md:p-8">
@@ -136,7 +215,7 @@ export default function ExerciseDetailPage() {
             </p>
           )}
 
-          {/* Odtwarzacz wideo lub link źródłowy */}
+          {/* Odtwarzacz wideo źródłowego / tutoriala */}
           {exercise.video_url && (
             <div className="mb-6">
               {exercise.video_url.includes("youtube.com/embed") ? (
@@ -176,9 +255,7 @@ export default function ExerciseDetailPage() {
           {/* Tagi anatomiczne */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-neutral-800/60">
             <div>
-              <p className="text-xs text-neutral-400 mb-2 font-medium">
-                Kluczowe stawy:
-              </p>
+              <p className="text-xs text-neutral-400 mb-2 font-medium">Kluczowe stawy:</p>
               <div className="flex flex-wrap gap-1.5 select-none">
                 {exercise.joints && exercise.joints.length > 0 ? (
                   exercise.joints.map((joint) => (
@@ -196,9 +273,7 @@ export default function ExerciseDetailPage() {
             </div>
 
             <div>
-              <p className="text-xs text-neutral-400 mb-2 font-medium">
-                Główne mięśnie i ścięgna:
-              </p>
+              <p className="text-xs text-neutral-400 mb-2 font-medium">Główne mięśnie i ścięgna:</p>
               <div className="flex flex-wrap gap-1.5 select-none">
                 {exercise.muscles && exercise.muscles.length > 0 ? (
                   exercise.muscles.map((muscle) => (
@@ -217,7 +292,7 @@ export default function ExerciseDetailPage() {
           </div>
         </div>
 
-        {/* DRZEWKO PROGRESJI: Skill Tree Card */}
+        {/* DRZEWKO PROGRESJI */}
         <div className="bg-neutral-900/50 border border-neutral-800/90 rounded-3xl p-6 md:p-8 space-y-6">
           <div>
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -229,7 +304,6 @@ export default function ExerciseDetailPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Wymagania wstępne */}
             <div className="bg-neutral-950/60 border border-neutral-800/80 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-amber-400" />
@@ -262,7 +336,6 @@ export default function ExerciseDetailPage() {
               )}
             </div>
 
-            {/* Co odblokowuje dalej */}
             <div className="bg-neutral-950/60 border border-neutral-800/80 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -273,7 +346,7 @@ export default function ExerciseDetailPage() {
 
               {unlockedTricks.length === 0 ? (
                 <p className="text-xs text-neutral-500 italic py-2">
-                  Ten element jest obecnie na szczycie gałęzi progresji lub kolejne tricki nie zostały jeszcze zlinkowane.
+                  Ten element jest obecnie na szczycie gałęzi progresji lub kolejne tricki nie zostały jeszcze powiązane.
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -297,27 +370,144 @@ export default function ExerciseDetailPage() {
           </div>
         </div>
 
-        {/* Sekcja Progresu Użytkowników */}
-        <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-3xl p-6 md:p-8">
-          <div className="flex items-center justify-between mb-4">
+        {/* FEED PRÓB ZAWODNIKÓW DLA TEGO TRICKU */}
+        <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-3xl p-6 md:p-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-white">
-                Nasz progres & Próby zawodników
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>📹</span> Próby i Progres Zawodników
               </h2>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Wrzucaj nagrania swoich powtórzeń, analizuj technikę i zbieraj feedback.
+                Nagrania wykonania tego elementu ({submissions.length} wideo).
               </p>
             </div>
-            <button className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium px-3.5 py-2 rounded-xl border border-neutral-700 transition-colors cursor-pointer">
-              + Dodaj wideo próby
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs px-4 py-2 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
+            >
+              + Dodaj swoje wideo
             </button>
           </div>
 
-          <div className="p-8 text-center border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-sm">
-            Brak dodanych nagrań dla tego elementu. Bądź pierwszym, który wrzuci swoją próbę!
-          </div>
+          {submissions.length === 0 ? (
+            <div className="p-8 text-center border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-sm">
+              Brak dodanych nagrań dla tego tricku. Bądź pierwszym, który wrzuci swoją próbę!
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {submissions.map((sub) => (
+                <div
+                  key={sub.id}
+                  className="bg-neutral-950/80 border border-neutral-800 rounded-2xl p-5 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300 font-bold text-xs">
+                        {sub.athlete_name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-semibold text-sm text-neutral-200">
+                        {sub.athlete_name}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-neutral-500">
+                      {new Date(sub.created_at).toLocaleDateString("pl-PL", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+
+                  {/* Odtwarzacz */}
+                  {sub.video_url && (
+                    <div className="rounded-xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800">
+                      <iframe
+                        src={sub.video_url}
+                        title={`Próba ${sub.athlete_name}`}
+                        className="w-full h-full"
+                        allowFullScreen
+                      />
+                    </div>
+                  )}
+
+                  {sub.notes && (
+                    <p className="text-neutral-300 text-xs bg-neutral-900/60 p-3 rounded-xl border border-neutral-800/60">
+                      💬 {sub.notes}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Modal dodawania wideo pod tym trickiem */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-1">
+              Wrzuć próbę: {exercise.title}
+            </h2>
+            <p className="text-xs text-neutral-400 mb-4">
+              Twoje nagranie pojawi się tutaj oraz w ogólnym feedzie Timeline.
+            </p>
+
+            <form onSubmit={handleAddSubmission} className="space-y-4">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Twoje imię / Nick *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="np. Piotrek, Alicja"
+                  value={form.athlete_name}
+                  onChange={(e) => setForm({ ...form, athlete_name: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Link do wideo (YouTube / Shorts) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="https://www.youtube.com/watch?v=... lub Shorts"
+                  value={form.video_url}
+                  onChange={(e) => setForm({ ...form, video_url: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Komentarz / Wnioski z próby</label>
+                <textarea
+                  rows={2}
+                  placeholder="Co poprawić, jak amortyzacja, czy trick wszedł czysto..."
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
+                >
+                  Zapisz próbę
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
