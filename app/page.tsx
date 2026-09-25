@@ -15,17 +15,14 @@ interface Exercise {
   video_url?: string;
   sources?: string[];
   prerequisite_ids?: string[];
-  muscles?: string[];
-  joints?: string[];
 }
 
-interface Workout {
+interface Competition {
   id: string;
-  title: string;
-  description: string;
-  level: string;
-  exercise_ids: string[];
-  created_at: string;
+  name: string;
+  date: string;
+  location?: string;
+  phase: string;
 }
 
 const MAIN_CATEGORIES = [
@@ -111,36 +108,44 @@ const STANDARD_DIFFICULTIES = [
   "Zaawansowany / Wyczyn",
 ];
 
+const TEAM_PASSWORD = "Kawashi2026";
 const COACH_PIN = "1234";
 
 export default function Home() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("Tricking");
   const [activeSubcategory, setActiveSubcategory] = useState("Wszystkie podkategorie");
   const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const [isCoach, setIsCoach] = useState(false);
-  const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
+  // Powiadomienie Timeline
+  const [hasNewTimelinePosts, setHasNewTimelinePosts] = useState(false);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
+  // Status logowania (Konto / Trener)
+  const [userRole, setUserRole] = useState<"guest" | "member" | "coach">("guest");
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [loginInputPass, setLoginInputPass] = useState("");
+  const [loginIsCoachCheck, setLoginIsCoachCheck] = useState(false);
 
-  const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
-  const [workoutForm, setWorkoutForm] = useState({
-    title: "",
-    description: "",
-    level: "Średniozaawansowany",
-    exercise_ids: [] as string[],
+  // Kalendarz zawodów & Faza przygotowań
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [isCompModalOpen, setIsCompModalOpen] = useState(false);
+  const [compForm, setCompForm] = useState({
+    name: "",
+    date: "",
+    location: "",
+    phase: "Nauka nowych elementów",
   });
 
-  const [prereqQuery, setPrereqQuery] = useState("");
-  const [isPrereqDropdownOpen, setIsPrereqDropdownOpen] = useState(false);
-  const prereqRef = useRef<HTMLDivElement>(null);
+  const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
-  // Formularz z tablicą źródeł
+  // Modale ćwiczeń i treningów
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
+  const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
+
+  // Formularz ćwiczeń z wieloma źródłami
   const [formData, setFormData] = useState({
     title: "",
     category: "Tricking",
@@ -156,84 +161,72 @@ export default function Home() {
     setLoading(true);
     const { data: exData } = await supabase
       .from("exercises")
-      .select("id, title, category, subcategory, difficulty, short_description, description, video_url, sources, prerequisite_ids, muscles, joints")
+      .select("id, title, category, subcategory, difficulty, short_description, description, video_url, sources, prerequisite_ids")
       .order("created_at", { ascending: false });
 
     if (exData) setExercises(exData);
 
-    const { data: woData } = await supabase
-      .from("workouts")
+    const { data: compData } = await supabase
+      .from("competitions")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("date", { ascending: true });
 
-    if (woData) setWorkouts(woData);
+    if (compData) setCompetitions(compData);
+
+    // Sprawdzenie czy w Timeline są nowe wpisy z ostatnich 48h
+    const { data: recentPosts } = await supabase
+      .from("progress_submissions")
+      .select("id, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (recentPosts && recentPosts.length > 0) {
+      const lastPostDate = new Date(recentPosts[0].created_at).getTime();
+      const twoDaysAgo = Date.now() - 48 * 60 * 60 * 1000;
+      if (lastPostDate > twoDaysAgo) {
+        setHasNewTimelinePosts(true);
+      }
+    }
 
     setLoading(false);
   };
 
   useEffect(() => {
     fetchData();
-    const savedRole = localStorage.getItem("coach_access");
-    if (savedRole === "true") {
-      setIsCoach(true);
-    }
+    const storedRole = localStorage.getItem("goat_user_role") as "member" | "coach" | null;
+    if (storedRole) setUserRole(storedRole);
   }, []);
 
-  const handleToggleCoach = () => {
-    if (isCoach) {
-      setIsCoach(false);
-      localStorage.removeItem("coach_access");
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginIsCoachCheck) {
+      if (loginInputPass === COACH_PIN) {
+        setUserRole("coach");
+        localStorage.setItem("goat_user_role", "coach");
+        setIsLoginModalOpen(false);
+        setLoginInputPass("");
+      } else {
+        alert("Błędny PIN Trenera / Admina!");
+      }
     } else {
-      const pin = prompt("Podaj kod dostępu Trenera / Admina:");
-      if (pin === COACH_PIN) {
-        setIsCoach(true);
-        localStorage.setItem("coach_access", "true");
-      } else if (pin !== null) {
-        alert("Nieprawidłowy kod dostępu.");
+      if (loginInputPass === TEAM_PASSWORD) {
+        setUserRole("member");
+        localStorage.setItem("goat_user_role", "member");
+        setIsLoginModalOpen(false);
+        setLoginInputPass("");
+      } else {
+        alert("Błędne hasło drużyny!");
       }
     }
   };
 
-  const handleCategorySwitch = (category: string) => {
-    setActiveCategory(category);
-    setActiveSubcategory(SUBCATEGORIES_CONFIG[category][0]);
-    setActiveTrickingLevel("Wszystkie poziomy");
+  const handleLogout = () => {
+    setUserRole("guest");
+    localStorage.removeItem("goat_user_role");
   };
 
   const toggleExpand = (id: string) => {
-    setExpandedCardIds((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
-
-  const handleOpenEdit = (e: React.MouseEvent, ex: Exercise) => {
-    e.stopPropagation();
-    setEditingExerciseId(ex.id);
-    const existingSources = ex.sources && ex.sources.length > 0 ? ex.sources : (ex.video_url ? [ex.video_url] : [""]);
-    setFormData({
-      title: ex.title,
-      category: ex.category,
-      subcategory: ex.subcategory || SUBCATEGORIES_CONFIG[ex.category][1] || "",
-      difficulty: ex.difficulty,
-      short_description: ex.short_description || "",
-      description: ex.description || "",
-      sources: existingSources,
-      prerequisite_ids: ex.prerequisite_ids || [],
-    });
-    setIsModalOpen(true);
-  };
-
-  const handleDeleteExercise = async (e: React.MouseEvent, id: string, title: string) => {
-    e.stopPropagation();
-    if (!confirm(`Czy na pewno chcesz usunąć "${title}"?`)) return;
-
-    const { error } = await supabase.from("exercises").delete().eq("id", id);
-    if (!error) {
-      setExercises((prev) => prev.filter((item) => item.id !== id));
-    } else {
-      alert("Błąd usuwania: " + error.message);
-    }
+    setExpandedCardIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const formatUrl = (url: string) => {
@@ -254,34 +247,7 @@ export default function Home() {
       const fileId = url.split("/d/")[1]?.split("/")[0];
       return `https://drive.google.com/file/d/${fileId}/preview`;
     }
-    if (url.includes("open.spotify.com/playlist/")) {
-      const playlistId = url.split("playlist/")[1]?.split("?")[0];
-      return `https://open.spotify.com/embed/playlist/${playlistId}?utm_source=generator&theme=0`;
-    }
     return url;
-  };
-
-  // Obsługa wielu źródeł w formularzu
-  const handleSourceChange = (index: number, value: string) => {
-    setFormData((prev) => {
-      const newSources = [...prev.sources];
-      newSources[index] = value;
-      return { ...prev, sources: newSources };
-    });
-  };
-
-  const addSourceField = () => {
-    setFormData((prev) => ({
-      ...prev,
-      sources: [...prev.sources, ""],
-    }));
-  };
-
-  const removeSourceField = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      sources: prev.sources.filter((_, i) => i !== index),
-    }));
   };
 
   const handleSaveExercise = async (e: React.FormEvent) => {
@@ -318,19 +284,39 @@ export default function Home() {
         );
         setIsModalOpen(false);
         setEditingExerciseId(null);
-      } else if (error) {
-        alert("Błąd zapisu: " + error.message);
       }
     } else {
       const { data, error } = await supabase.from("exercises").insert([payload]).select();
       if (!error && data) {
         setExercises((prev) => [data[0], ...prev]);
         setIsModalOpen(false);
-      } else if (error) {
-        alert("Błąd zapisu: " + error.message);
       }
     }
   };
+
+  const handleSaveCompetition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!compForm.name || !compForm.date) return;
+
+    const { data, error } = await supabase.from("competitions").insert([compForm]).select();
+    if (!error && data) {
+      setCompetitions((prev) => [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+      setIsCompModalOpen(false);
+      setCompForm({ name: "", date: "", location: "", phase: "Nauka nowych elementów" });
+    }
+  };
+
+  // Najbliższe zawody do widgetu w nagłówku
+  const nextCompetition = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0];
+    return competitions.find((c) => c.date >= today) || competitions[0];
+  }, [competitions]);
+
+  const daysToComp = useMemo(() => {
+    if (!nextCompetition) return null;
+    const diff = new Date(nextCompetition.date).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }, [nextCompetition]);
 
   const filteredList = useMemo(() => {
     return exercises.filter((item) => {
@@ -341,12 +327,7 @@ export default function Home() {
         item.short_description?.toLowerCase().includes(searchTerm.toLowerCase());
       if (!matchesSearch) return false;
 
-      const isAllSub =
-        activeSubcategory.startsWith("Wszystkie podkategorie") ||
-        activeSubcategory.startsWith("Wszystkie partie") ||
-        activeSubcategory.startsWith("Wszystkie grupy") ||
-        activeSubcategory.startsWith("Wszystkie zestawy") ||
-        activeSubcategory.startsWith("Wszystkie playlisty");
+      const isAllSub = activeSubcategory.startsWith("Wszystkie");
       if (!isAllSub && item.subcategory && item.subcategory !== activeSubcategory) {
         return false;
       }
@@ -362,84 +343,175 @@ export default function Home() {
   }, [exercises, activeCategory, activeSubcategory, activeTrickingLevel, searchTerm]);
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
-      {/* Nagłówek */}
-      <header className="max-w-6xl mx-auto mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-neutral-800/80 pb-6 select-none">
-        <div className="max-w-2xl">
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-extrabold tracking-tight text-emerald-400">
-              ROAD TO GOAT
-            </h1>
-            {isCoach && (
-              <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-md">
-                Tryb Trenera
+    <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
+      {/* SEKCJA HERO BANNER ZE ZDJĘCIEM W TLE */}
+      <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
+        {/* Zdjęcie z klimatycznym gradientem */}
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-screen scale-105"
+          style={{ backgroundImage: `url('/hero-acro.jpg')` }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-transparent" />
+
+        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-8 pb-10 flex flex-col justify-between min-h-[300px]">
+          {/* Top Bar z logowaniem i Timeline */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-widest font-extrabold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-3 py-1 rounded-full">
+                ROAD TO GOAT
               </span>
-            )}
+              {userRole === "coach" && (
+                <span className="text-[10px] uppercase font-bold tracking-wider bg-red-950/80 text-red-400 border border-red-800 px-2 py-0.5 rounded-full">
+                  Admin Trener
+                </span>
+              )}
+            </div>
+
+            {/* Prawy róg: Oś czasu z czerwoną chmurką + Dostęp/Logowanie */}
+            <div className="flex items-center gap-3">
+              {/* Timeline z dynamiczną czerwoną kropką powiadomienia */}
+              <Link
+                href="/timeline"
+                className="relative flex items-center gap-2 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 hover:border-emerald-500/50 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all shadow-md active:scale-95"
+              >
+                <span>🎬 Timeline</span>
+                {hasNewTimelinePosts && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                  </span>
+                )}
+              </Link>
+
+              {/* Przycisk Logowania / Profilu */}
+              {userRole === "guest" ? (
+                <button
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-xs px-3 py-1.5 rounded-xl text-neutral-300 hover:text-white transition-all cursor-pointer"
+                >
+                  🔐 Zaloguj
+                </button>
+              ) : (
+                <button
+                  onClick={handleLogout}
+                  className="bg-neutral-900/90 hover:bg-red-950/50 border border-neutral-800 hover:border-red-800 text-xs px-3 py-1.5 rounded-xl text-neutral-400 hover:text-red-300 transition-all cursor-pointer"
+                >
+                  Wyloguj ({userRole === "coach" ? "Trener" : "Team"})
+                </button>
+              )}
+            </div>
           </div>
-          <p className="text-neutral-400 text-sm mt-2 leading-relaxed">
-            Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
-          </p>
+
+          {/* Środek Hero: Tytuł i Minimalistyczny Kalendarz Startowy */}
+          <div className="my-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
+            <div className="lg:col-span-2">
+              <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase drop-shadow-lg">
+                Mistrzowski Poziom <br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">
+                  Krok po kroku
+                </span>
+              </h1>
+              <p className="text-neutral-300 text-xs md:text-sm mt-3 max-w-xl leading-relaxed">
+                Struktura, progresje trickingowe, przygotowanie motoryczne i monitoring formy.
+              </p>
+            </div>
+
+            {/* MINIMALISTYCZNY KALENDARZ ZAWODÓW (Rzut okiem) */}
+            <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
+                <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🏆</span> Cel Startowy
+                </span>
+                {userRole === "coach" && (
+                  <button
+                    onClick={() => setIsCompModalOpen(true)}
+                    className="text-[10px] text-emerald-400 hover:underline cursor-pointer"
+                  >
+                    + Zaplanuj
+                  </button>
+                )}
+              </div>
+
+              {nextCompetition ? (
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="font-bold text-white text-sm truncate max-w-[170px]">
+                      {nextCompetition.name}
+                    </h3>
+                    <span className="text-xs font-mono font-bold text-emerald-400">
+                      {daysToComp !== null ? `${daysToComp} dni` : ""}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                    <span>{nextCompetition.date}</span>
+                    <span className="text-emerald-300/80 font-medium bg-emerald-950/60 border border-emerald-900/60 px-2 py-0.5 rounded-md">
+                      {nextCompetition.phase}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-neutral-500 py-1">
+                  Brak zaplanowanych zawodów.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Kapsuła akcji: Stwórz trening + Dodaj pozycję + Zaplanuj zawody */}
+          <div className="flex flex-wrap items-center gap-2.5 pt-2">
+            <button
+              onClick={() => {
+                setEditingExerciseId(null);
+                setFormData({
+                  title: "",
+                  category: activeCategory === "Własne treningi" ? "Tricking" : activeCategory,
+                  subcategory: SUBCATEGORIES_CONFIG[activeCategory === "Własne treningi" ? "Tricking" : activeCategory][1] || "",
+                  difficulty: activeCategory === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
+                  short_description: "",
+                  description: "",
+                  sources: [""],
+                  prerequisite_ids: [],
+                });
+                setIsModalOpen(true);
+              }}
+              className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
+            >
+              + Dodaj pozycję
+            </button>
+
+            <button
+              onClick={() => setIsWorkoutModalOpen(true)}
+              className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+            >
+              🏋️ Stwórz Trening
+            </button>
+
+            <button
+              onClick={() => setIsCompModalOpen(true)}
+              className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+            >
+              🏆 Plan na zawody
+            </button>
+          </div>
         </div>
+      </section>
 
-        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
-          <Link
-            href="/timeline"
-            className="flex items-center gap-1.5 bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer"
-          >
-            <span>🎬</span>
-            <span>Timeline</span>
-          </Link>
-
-          <button
-            onClick={() => setIsWorkoutModalOpen(true)}
-            className="flex items-center gap-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all hover:text-white active:scale-95 cursor-pointer"
-          >
-            <span>🏋️</span>
-            <span>Stwórz Trening</span>
-          </button>
-
-          <button
-            onClick={handleToggleCoach}
-            className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
-              isCoach
-                ? "bg-neutral-800 text-emerald-400 border-emerald-500/50 hover:bg-neutral-700"
-                : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white"
-            }`}
-          >
-            {isCoach ? "🔒 Trener" : "🔑 Trener"}
-          </button>
-
-          <button
-            onClick={() => {
-              setEditingExerciseId(null);
-              setFormData({
-                title: "",
-                category: activeCategory === "Własne treningi" ? "Tricking" : activeCategory,
-                subcategory: SUBCATEGORIES_CONFIG[activeCategory === "Własne treningi" ? "Tricking" : activeCategory][1] || "",
-                difficulty: activeCategory === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
-                short_description: "",
-                description: "",
-                sources: [""],
-                prerequisite_ids: [],
-              });
-              setIsModalOpen(true);
-            }}
-            className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-2 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
-          >
-            + Dodaj pozycję
-          </button>
-        </div>
-      </header>
-
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none select-none border-b border-neutral-900 pb-4">
+      {/* ZAWARTOŚĆ GŁÓWNA */}
+      <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
+        {/* Pasek kategorii głównych */}
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none select-none border-b border-neutral-900 pb-3">
           {MAIN_CATEGORIES.map((cat) => (
             <button
               key={cat}
-              onClick={() => handleCategorySwitch(cat)}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all cursor-pointer whitespace-nowrap ${
+              onClick={() => {
+                setActiveCategory(cat);
+                setActiveSubcategory(SUBCATEGORIES_CONFIG[cat][0]);
+                setActiveTrickingLevel("Wszystkie poziomy");
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer whitespace-nowrap ${
                 activeCategory === cat
-                  ? "bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+                  ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
                   : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
               }`}
             >
@@ -448,17 +520,19 @@ export default function Home() {
           ))}
         </div>
 
+        {/* Wyszukiwarka */}
         <input
           type="text"
-          placeholder={`Szukaj w ${activeCategory}...`}
+          placeholder={`Wyszukaj w sekcji ${activeCategory}...`}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
         />
 
+        {/* Pasek podkategorii */}
         {activeCategory !== "Własne treningi" && (
           <div className="space-y-3 select-none">
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
               <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mr-1">
                 Podział:
               </span>
@@ -477,8 +551,9 @@ export default function Home() {
               ))}
             </div>
 
+            {/* Filtr poziomów dla Trickingu */}
             {activeCategory === "Tricking" && (
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mr-1">
                   Poziom:
                 </span>
@@ -503,7 +578,7 @@ export default function Home() {
         {/* Siatka kart */}
         {loading ? (
           <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
-            Ładowanie bazy danych...
+            Ładowanie bazy...
           </div>
         ) : filteredList.length === 0 ? (
           <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
@@ -563,7 +638,7 @@ export default function Home() {
                   >
                     <div className="overflow-hidden space-y-4">
                       <p className="text-neutral-400 text-xs leading-relaxed">
-                        {item.short_description || "Brak krótkiego opisu."}
+                        {item.short_description || "Brak opisu."}
                       </p>
 
                       {isSpotify && primaryMedia && (
@@ -579,16 +654,36 @@ export default function Home() {
                       )}
 
                       <div className="flex items-center justify-between pt-1">
-                        {isCoach ? (
+                        {userRole === "coach" ? (
                           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button
-                              onClick={(e) => handleOpenEdit(e, item)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingExerciseId(item.id);
+                                const exSources = item.sources && item.sources.length > 0 ? item.sources : (item.video_url ? [item.video_url] : [""]);
+                                setFormData({
+                                  title: item.title,
+                                  category: item.category,
+                                  subcategory: item.subcategory || SUBCATEGORIES_CONFIG[item.category][1] || "",
+                                  difficulty: item.difficulty,
+                                  short_description: item.short_description || "",
+                                  description: item.description || "",
+                                  sources: exSources,
+                                  prerequisite_ids: item.prerequisite_ids || [],
+                                });
+                                setIsModalOpen(true);
+                              }}
                               className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2.5 py-1.5 rounded-lg border border-neutral-700"
                             >
                               ✏️ Edytuj
                             </button>
                             <button
-                              onClick={(e) => handleDeleteExercise(e, item.id, item.title)}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!confirm(`Usunąć ${item.title}?`)) return;
+                                const { error } = await supabase.from("exercises").delete().eq("id", item.id);
+                                if (!error) setExercises((p) => p.filter((x) => x.id !== item.id));
+                              }}
                               className="text-xs bg-red-950/40 hover:bg-red-900/60 text-red-400 px-2.5 py-1.5 rounded-lg border border-red-900/50"
                             >
                               🗑️
@@ -619,9 +714,143 @@ export default function Home() {
         )}
       </div>
 
-      {/* Modal dodawania i edycji z WIELOMA ŹRÓDŁAMI */}
+      {/* MODAL LOGOWANIA (ZAWODNIK / TRENER) */}
+      {isLoginModalOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h2 className="text-lg font-bold text-white mb-2">🔐 Dostęp do platformy</h2>
+            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
+              Wpisz hasło zespołowe lub wybierz tryb Trenera/Admina.
+            </p>
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">
+                  {loginIsCoachCheck ? "PIN Trenera (Admin)" : "Hasło Drużyny"}
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder={loginIsCoachCheck ? "PIN..." : "Hasło..."}
+                  value={loginInputPass}
+                  onChange={(e) => setLoginInputPass(e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="coachCheck"
+                  checked={loginIsCoachCheck}
+                  onChange={(e) => setLoginIsCoachCheck(e.target.checked)}
+                  className="rounded border-neutral-800 bg-neutral-950 text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="coachCheck" className="text-xs text-neutral-300 cursor-pointer select-none">
+                  Logowanie jako Trener (Admin)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsLoginModalOpen(false)}
+                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
+                >
+                  Zaloguj
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PLANOWANIA ZAWODÓW */}
+      {isCompModalOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h2 className="text-lg font-bold text-white mb-2">🏆 Zaplanuj Zawody & Periodyzację</h2>
+
+            <form onSubmit={handleSaveCompetition} className="space-y-3">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Nazwa zawodów / Turnieju *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="np. Mistrzostwa Polski Form Muzycznych"
+                  value={compForm.name}
+                  onChange={(e) => setCompForm({ ...compForm, name: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Data startu *</label>
+                  <input
+                    type="date"
+                    required
+                    value={compForm.date}
+                    onChange={(e) => setCompForm({ ...compForm, date: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Miasto / Miejsce</label>
+                  <input
+                    type="text"
+                    placeholder="np. Warszawa"
+                    value={compForm.location}
+                    onChange={(e) => setCompForm({ ...compForm, location: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Aktualna faza przygotowań</label>
+                <select
+                  value={compForm.phase}
+                  onChange={(e) => setCompForm({ ...compForm, phase: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Nauka nowych elementów">Nauka nowych elementów (Baza & Tricki)</option>
+                  <option value="Budowa Formy pod Muzykę">Budowa Formy pod Muzykę (Kombinacje)</option>
+                  <option value="Szlifowanie & Czystość lądowań">Szlifowanie & Czystość lądowań</option>
+                  <option value="Tapering / Regeneracja">Tapering / Szczyt świeżości</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCompModalOpen(false)}
+                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
+                >
+                  Zapisz Plan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DODAWANIA POZYCJI (Z WIELOMA ŹRÓDŁAMI) */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-white mb-4">
               {editingExerciseId ? "✏️ Edytuj pozycję" : "+ Dodaj nowy element"}
@@ -629,13 +858,11 @@ export default function Home() {
 
             <form onSubmit={handleSaveExercise} className="space-y-4">
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">
-                  Nazwa *
-                </label>
+                <label className="text-xs text-neutral-400 block mb-1">Nazwa *</label>
                 <input
                   type="text"
                   required
-                  placeholder="np. Corkscrew, Przysiad bułgarski"
+                  placeholder="np. Corkscrew, B-twist"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -644,7 +871,7 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Kategoria główna</label>
+                  <label className="text-xs text-neutral-400 block mb-1">Kategoria</label>
                   <select
                     value={formData.category}
                     onChange={(e) => {
@@ -685,7 +912,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Poziom / Zaawansowanie</label>
+                <label className="text-xs text-neutral-400 block mb-1">Poziom</label>
                 <select
                   value={formData.difficulty}
                   onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
@@ -703,9 +930,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs text-emerald-400 block mb-1 font-medium">
-                  Krótki opis (widoczny na kafelku) *
-                </label>
+                <label className="text-xs text-emerald-400 block mb-1 font-medium">Krótki opis *</label>
                 <input
                   type="text"
                   required
@@ -717,48 +942,49 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">
-                  Szczegółowy opis i wskazówki metodyczne
-                </label>
+                <label className="text-xs text-neutral-400 block mb-1">Wskazówki metodyczne (opis)</label>
                 <textarea
-                  rows={3}
-                  placeholder="Technika, błędy, spotting..."
+                  rows={2}
+                  placeholder="Technika, spotting..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              {/* SEKCJA WIELU ŹRÓDEŁ (MULTIPLE SOURCES) */}
+              {/* ŹRÓDŁA WIDEO */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs text-emerald-400 font-medium">
-                    🔗 Źródła materiałów (YouTube, Google Drive, Spotify, artykuły)
+                    🔗 Źródła wideo (YouTube, Shorts, Dysk Google)
                   </label>
                   <button
                     type="button"
-                    onClick={addSourceField}
+                    onClick={() => setFormData((p) => ({ ...p, sources: [...p.sources, ""] }))}
                     className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
                   >
-                    + Dodaj kolejne źródło
+                    + Dodaj kolejne wideo
                   </button>
                 </div>
 
-                {formData.sources.map((sourceUrl, idx) => (
+                {formData.sources.map((s, idx) => (
                   <div key={idx} className="flex items-center gap-2">
                     <input
                       type="text"
-                      placeholder={`Link źródła #${idx + 1} (np. https://youtube.com/...)`}
-                      value={sourceUrl}
-                      onChange={(e) => handleSourceChange(idx, e.target.value)}
+                      placeholder={`Link wideo #${idx + 1}`}
+                      value={s}
+                      onChange={(e) => {
+                        const newS = [...formData.sources];
+                        newS[idx] = e.target.value;
+                        setFormData({ ...formData, sources: newS });
+                      }}
                       className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                     />
                     {formData.sources.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => removeSourceField(idx)}
-                        className="px-2 py-2 text-neutral-500 hover:text-red-400 text-sm font-bold cursor-pointer"
-                        title="Usuń to źródło"
+                        onClick={() => setFormData((p) => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
+                        className="text-neutral-500 hover:text-red-400 text-sm px-2 cursor-pointer"
                       >
                         ✕
                       </button>

@@ -43,10 +43,14 @@ export default function ExerciseDetailPage() {
   const [submissions, setSubmissions] = useState<ProgressSubmission[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Indeks aktualnie wyświetlanego wideo w karuzeli
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState({ athlete_name: "", video_url: "", notes: "" });
 
-  const formatVideoUrl = (url: string) => {
+  // Inteligentny parser URL (zwraca embed gotowy do iframe)
+  const parseVideoEmbed = (url: string) => {
     if (!url) return "";
     if (url.includes("drive.google.com/file/d/")) {
       const fileId = url.split("/d/")[1]?.split("/")[0];
@@ -63,6 +67,9 @@ export default function ExerciseDetailPage() {
     if (url.includes("youtu.be/")) {
       const videoId = url.split("youtu.be/")[1]?.split("?")[0];
       return `https://www.youtube.com/embed/${videoId}`;
+    }
+    if (url.includes("youtube.com/embed/")) {
+      return url;
     }
     return url;
   };
@@ -91,8 +98,6 @@ export default function ExerciseDetailPage() {
         .in("id", currentEx.prerequisite_ids);
 
       if (prereqData) setPrerequisites(prereqData);
-    } else {
-      setPrerequisites([]);
     }
 
     const { data: unlockedData } = await supabase
@@ -125,21 +130,16 @@ export default function ExerciseDetailPage() {
       athlete_name: form.athlete_name,
       exercise_id: exercise.id,
       exercise_title: exercise.title,
-      video_url: formatVideoUrl(form.video_url),
+      video_url: parseVideoEmbed(form.video_url),
       notes: form.notes,
     };
 
-    const { data, error } = await supabase
-      .from("progress_submissions")
-      .insert([payload])
-      .select();
+    const { data, error } = await supabase.from("progress_submissions").insert([payload]).select();
 
     if (!error && data) {
       setSubmissions((prev) => [data[0], ...prev]);
       setIsModalOpen(false);
       setForm({ athlete_name: "", video_url: "", notes: "" });
-    } else if (error) {
-      alert("Błąd: " + error.message);
     }
   };
 
@@ -155,17 +155,19 @@ export default function ExerciseDetailPage() {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 p-8 flex flex-col items-center justify-center">
         <p className="text-neutral-400 mb-4">Nie znaleziono takiego ćwiczenia.</p>
-        <Link href="/" className="text-emerald-400 hover:text-emerald-300 text-sm font-semibold underline">
+        <Link href="/" className="text-emerald-400 underline text-sm">
           ← Wróć do bazy
         </Link>
       </div>
     );
   }
 
-  // Lista wszystkich źródeł (nowa tablica lub stary pojedynczy video_url)
-  const allSources = exercise.sources && exercise.sources.length > 0 
-    ? exercise.sources 
+  // Lista materiałów źródłowych
+  const allSources = (exercise.sources && exercise.sources.length > 0)
+    ? exercise.sources
     : (exercise.video_url ? [exercise.video_url] : []);
+
+  const currentSourceUrl = allSources[currentVideoIndex] ? parseVideoEmbed(allSources[currentVideoIndex]) : "";
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
@@ -180,7 +182,7 @@ export default function ExerciseDetailPage() {
           </Link>
 
           <Link href="/timeline" className="text-xs text-neutral-400 hover:text-emerald-400 transition-colors">
-            🎬 Otwórz globalny Timeline →
+            🎬 Globalny Timeline →
           </Link>
         </div>
 
@@ -204,41 +206,62 @@ export default function ExerciseDetailPage() {
             </p>
           )}
 
-          {/* PREZENTACJA WSZYSTKICH ŹRÓDEŁ */}
-          {allSources.length > 0 && (
-            <div className="space-y-4 mb-6">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-                Materiały źródłowe & Tutoriale ({allSources.length}):
-              </h2>
-              <div className="space-y-4">
-                {allSources.map((sourceUrl, idx) => {
-                  const isEmbed = sourceUrl.includes("youtube.com/embed") || sourceUrl.includes("drive.google.com");
-                  return (
-                    <div key={idx} className="space-y-2">
-                      {isEmbed ? (
-                        <div className="rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800 shadow-2xl">
-                          <iframe
-                            src={sourceUrl}
-                            title={`${exercise.title} - źródło ${idx + 1}`}
-                            className="w-full h-full"
-                            allowFullScreen
-                          />
-                        </div>
-                      ) : (
-                        <a
-                          href={sourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between p-3.5 bg-neutral-950 border border-neutral-800 hover:border-emerald-500/50 rounded-xl text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-                        >
-                          <span>🔗 Otwórz źródło #{idx + 1} w nowej karcie</span>
-                          <span className="text-neutral-500 truncate max-w-xs">{sourceUrl}</span>
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
+          {/* ODTWARZACZ WIDEO ZE STRZAŁKAMI PRZEŁĄCZANIA (CAROUSEL PLAYER) */}
+          {allSources.length > 0 ? (
+            <div className="mb-6 space-y-3">
+              <div className="relative rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800 shadow-2xl group">
+                <iframe
+                  src={currentSourceUrl}
+                  title={`${exercise.title} - źródło ${currentVideoIndex + 1}`}
+                  className="w-full h-full"
+                  allow="autoplay; encrypted-media; fullscreen"
+                  allowFullScreen
+                />
+
+                {/* Strzałki boczne, jeśli jest więcej niż jedno wideo */}
+                {allSources.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setCurrentVideoIndex((prev) => (prev > 0 ? prev - 1 : allSources.length - 1))}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-emerald-500 hover:text-black text-white w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg backdrop-blur-sm transition-all shadow-lg cursor-pointer"
+                      title="Poprzednie wideo"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      onClick={() => setCurrentVideoIndex((prev) => (prev < allSources.length - 1 ? prev + 1 : 0))}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-emerald-500 hover:text-black text-white w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg backdrop-blur-sm transition-all shadow-lg cursor-pointer"
+                      title="Następne wideo"
+                    >
+                      ›
+                    </button>
+                  </>
+                )}
               </div>
+
+              {/* Informacja o aktualnym wideo i kropki przełączania */}
+              {allSources.length > 1 && (
+                <div className="flex items-center justify-between text-xs text-neutral-400 px-1 select-none">
+                  <span>
+                    Materiał wideo: <strong>{currentVideoIndex + 1}</strong> z {allSources.length}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {allSources.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentVideoIndex(idx)}
+                        className={`h-2 rounded-full transition-all cursor-pointer ${
+                          currentVideoIndex === idx ? "w-6 bg-emerald-400" : "w-2 bg-neutral-700"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-8 text-center border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-xs mb-6">
+              Brak przypisanego wideo do tego ćwiczenia.
             </div>
           )}
 
@@ -259,10 +282,7 @@ export default function ExerciseDetailPage() {
               <div className="flex flex-wrap gap-1.5 select-none">
                 {exercise.joints && exercise.joints.length > 0 ? (
                   exercise.joints.map((joint) => (
-                    <span
-                      key={joint}
-                      className="text-xs bg-neutral-800 text-neutral-200 px-2.5 py-1 rounded-lg border border-neutral-700"
-                    >
+                    <span key={joint} className="text-xs bg-neutral-800 text-neutral-200 px-2.5 py-1 rounded-lg border border-neutral-700">
                       🦴 {joint}
                     </span>
                   ))
@@ -277,10 +297,7 @@ export default function ExerciseDetailPage() {
               <div className="flex flex-wrap gap-1.5 select-none">
                 {exercise.muscles && exercise.muscles.length > 0 ? (
                   exercise.muscles.map((muscle) => (
-                    <span
-                      key={muscle}
-                      className="text-xs bg-emerald-950/40 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-900/50"
-                    >
+                    <span key={muscle} className="text-xs bg-emerald-950/40 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-900/50">
                       ⚡ {muscle}
                     </span>
                   ))
@@ -294,27 +311,18 @@ export default function ExerciseDetailPage() {
 
         {/* Drzewko progresji */}
         <div className="bg-neutral-900/50 border border-neutral-800/90 rounded-3xl p-6 md:p-8 space-y-6">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <span>🌳</span> Drzewko Progresji (Skill Tree)
-            </h2>
-            <p className="text-xs text-neutral-400 mt-1">
-              Hierarchia i zależności ruchowe w metodyce nauczania.
-            </p>
-          </div>
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <span>🌳</span> Drzewko Progresji (Skill Tree)
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-neutral-950/60 border border-neutral-800/80 rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                  Wymagane fundamenty (Prerequisites)
-                </h3>
-              </div>
-
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300 mb-3">
+                Wymagane fundamenty (Prerequisites)
+              </h3>
               {prerequisites.length === 0 ? (
                 <p className="text-xs text-neutral-500 italic py-2">
-                  Brak wymagań wstępnych – ten ruch to element bazowy (Level 1 / Fundament).
+                  Brak wymagań wstępnych – element bazowy (Level 1).
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -322,11 +330,9 @@ export default function ExerciseDetailPage() {
                     <Link
                       key={p.id}
                       href={`/exercise/${p.id}`}
-                      className="flex items-center justify-between p-3 bg-neutral-900 border border-neutral-800 hover:border-amber-400/50 rounded-xl text-xs transition-colors group"
+                      className="flex items-center justify-between p-3 bg-neutral-900 border border-neutral-800 hover:border-amber-400/50 rounded-xl text-xs transition-colors"
                     >
-                      <span className="font-semibold text-neutral-200 group-hover:text-amber-300">
-                        🔒 {p.title}
-                      </span>
+                      <span className="font-semibold text-neutral-200">🔒 {p.title}</span>
                       <span className="text-[10px] text-neutral-500 bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
                         {p.difficulty}
                       </span>
@@ -337,13 +343,9 @@ export default function ExerciseDetailPage() {
             </div>
 
             <div className="bg-neutral-950/60 border border-neutral-800/80 rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                  Co odblokowuje (Next Steps)
-                </h3>
-              </div>
-
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300 mb-3">
+                Co odblokowuje (Next Steps)
+              </h3>
               {unlockedTricks.length === 0 ? (
                 <p className="text-xs text-neutral-500 italic py-2">
                   Ten element jest obecnie na szczycie gałęzi progresji.
@@ -354,11 +356,9 @@ export default function ExerciseDetailPage() {
                     <Link
                       key={u.id}
                       href={`/exercise/${u.id}`}
-                      className="flex items-center justify-between p-3 bg-neutral-900 border border-neutral-800 hover:border-emerald-500/50 rounded-xl text-xs transition-colors group"
+                      className="flex items-center justify-between p-3 bg-neutral-900 border border-neutral-800 hover:border-emerald-500/50 rounded-xl text-xs transition-colors"
                     >
-                      <span className="font-semibold text-neutral-200 group-hover:text-emerald-300">
-                        🔓 {u.title}
-                      </span>
+                      <span className="font-semibold text-neutral-200">🔓 {u.title}</span>
                       <span className="text-[10px] text-neutral-500 bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
                         {u.difficulty}
                       </span>
@@ -370,7 +370,7 @@ export default function ExerciseDetailPage() {
           </div>
         </div>
 
-        {/* Sekcja postępów zawodników */}
+        {/* FEED PRÓB ZAWODNIKÓW */}
         <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-3xl p-6 md:p-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -396,25 +396,11 @@ export default function ExerciseDetailPage() {
           ) : (
             <div className="space-y-6">
               {submissions.map((sub) => (
-                <div
-                  key={sub.id}
-                  className="bg-neutral-950/80 border border-neutral-800 rounded-2xl p-5 space-y-3"
-                >
+                <div key={sub.id} className="bg-neutral-950/80 border border-neutral-800 rounded-2xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300 font-bold text-xs">
-                        {sub.athlete_name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-semibold text-sm text-neutral-200">
-                        {sub.athlete_name}
-                      </span>
-                    </div>
+                    <span className="font-semibold text-sm text-neutral-200">{sub.athlete_name}</span>
                     <span className="text-[11px] text-neutral-500">
-                      {new Date(sub.created_at).toLocaleDateString("pl-PL", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      {new Date(sub.created_at).toLocaleDateString("pl-PL")}
                     </span>
                   </div>
 
@@ -441,12 +427,11 @@ export default function ExerciseDetailPage() {
         </div>
       </div>
 
+      {/* Modal dodawania próby */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-1">
-              Wrzuć próbę: {exercise.title}
-            </h2>
+            <h2 className="text-xl font-bold text-white mb-1">Wrzuć próbę: {exercise.title}</h2>
             <form onSubmit={handleAddSubmission} className="space-y-4">
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">Twoje imię / Nick *</label>
@@ -460,7 +445,7 @@ export default function ExerciseDetailPage() {
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Link do wideo *</label>
+                <label className="text-xs text-neutral-400 block mb-1">Link do wideo (YouTube / Google Drive) *</label>
                 <input
                   type="text"
                   required
