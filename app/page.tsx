@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -111,7 +111,6 @@ const STANDARD_DIFFICULTIES = [
 const TEAM_PASSWORD = "Kawashi2026";
 const COACH_PIN = "69420";
 
-// Grafiki bez myślników
 const HERO_IMAGES = [
   "/hero/hero1.jpg",
   "/hero/hero2.jpg",
@@ -129,13 +128,9 @@ export default function Home() {
   const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Karuzela w tle (zmiana co 10 sekund)
   const [currentHeroIdx, setCurrentHeroIdx] = useState(0);
-
-  // Kropka powiadomienia
   const [hasNewTimelinePosts, setHasNewTimelinePosts] = useState(false);
 
-  // System użytkownika (Nick + Rola)
   const [currentUser, setCurrentUser] = useState<{ username: string; role: "athlete" | "coach" } | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -143,7 +138,6 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState("");
   const [authIsCoach, setAuthIsCoach] = useState(false);
 
-  // Zawody & Kalendarz
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
   const [compForm, setCompForm] = useState({
@@ -155,7 +149,6 @@ export default function Home() {
 
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
-  // Modale
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
@@ -195,12 +188,7 @@ export default function Home() {
       const lastReadTimeStr = localStorage.getItem("timeline_last_read");
       const lastReadTime = lastReadTimeStr ? parseInt(lastReadTimeStr, 10) : 0;
 
-      // Kropka świeci TYLKO gdy data wpisu jest nowsza niż moment ostatniego wejścia
-      if (latestPostTime > lastReadTime) {
-        setHasNewTimelinePosts(true);
-      } else {
-        setHasNewTimelinePosts(false);
-      }
+      setHasNewTimelinePosts(latestPostTime > lastReadTime);
     }
   };
 
@@ -226,7 +214,6 @@ export default function Home() {
   useEffect(() => {
     fetchData();
 
-    // Odczyt profilu z localStorage
     const savedUserStr = localStorage.getItem("goat_athlete_profile");
     if (savedUserStr) {
       try {
@@ -239,17 +226,15 @@ export default function Home() {
     }
   }, []);
 
-  // Obsługa Logowania / Rejestracji bez maila
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanNick = authUsername.trim();
 
     if (!cleanNick) {
-      alert("Podaj swój nick!");
+      alert("Wpisz swój nick!");
       return;
     }
 
-    // Walidacja hasła
     if (authIsCoach) {
       if (authPassword !== COACH_PIN) {
         alert("Błędny PIN Trenera!");
@@ -257,7 +242,7 @@ export default function Home() {
       }
     } else {
       if (authPassword !== TEAM_PASSWORD) {
-        alert("Błędne hasło drużyny (wpisz Kawashi2026)!");
+        alert("Błędne hasło drużyny (wpisz: Kawashi2026)!");
         return;
       }
     }
@@ -265,16 +250,13 @@ export default function Home() {
     const assignedRole: "athlete" | "coach" = authIsCoach ? "coach" : "athlete";
 
     if (authMode === "register") {
-      // Rejestracja nowego nicku
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("athlete_profiles")
-        .insert([{ username: cleanNick, role: assignedRole }])
-        .select()
-        .single();
+        .insert([{ username: cleanNick, role: assignedRole }]);
 
       if (error) {
         if (error.code === "23505") {
-          alert("Ten nick jest już zajęty! Jeśli to Twoje konto, kliknij 'Masz już konto? Zaloguj się'.");
+          alert("Ten nick jest już zajęty! Jeśli to Twoje konto, kliknij 'Zaloguj się'.");
         } else {
           alert("Błąd rejestracji: " + error.message);
         }
@@ -289,7 +271,6 @@ export default function Home() {
       setAuthPassword("");
       checkTimelineUnread(true);
     } else {
-      // Logowanie
       const { data, error } = await supabase
         .from("athlete_profiles")
         .select("*")
@@ -435,37 +416,43 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
-      {/* SEKCJA HERO ZE ZDJĘCIAMI (hero1.jpg - hero6.jpg) */}
+      {/* SEKCJA HERO BANNER */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
-        <div className="absolute inset-0 overflow-hidden">
+        {/* Zdjęcia z karuzeli */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {HERO_IMAGES.map((src, idx) => (
             <div
               key={idx}
-              className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out mix-blend-screen scale-105 ${
-                idx === currentHeroIdx ? "opacity-35" : "opacity-0"
+              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                idx === currentHeroIdx ? "opacity-60" : "opacity-0"
               }`}
-              style={{ backgroundImage: `url('${src}')` }}
-            />
+            >
+              <img
+                src={src}
+                alt="Acrobatics banner"
+                className="w-full h-full object-cover object-center"
+              />
+            </div>
           ))}
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-neutral-950/40" />
+          {/* Cieniowanie tła dla czytelności tekstu */}
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/70 to-neutral-950/30" />
         </div>
 
         <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-8 pb-10 flex flex-col justify-between min-h-[320px]">
-          {/* Top Bar */}
+          {/* Górna belka */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-widest font-extrabold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-3 py-1 rounded-full">
+              <span className="text-xs uppercase tracking-widest font-extrabold text-emerald-400 bg-neutral-900/90 border border-emerald-500/40 px-3 py-1 rounded-full shadow">
                 ROAD TO GOAT
               </span>
               {currentUser?.role === "coach" && (
-                <span className="text-[10px] uppercase font-bold tracking-wider bg-red-950/80 text-red-400 border border-red-800 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] uppercase font-bold tracking-wider bg-red-950/90 text-red-400 border border-red-800 px-2 py-0.5 rounded-full">
                   Trener / Admin
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Timeline z kropką */}
               <Link
                 href="/timeline"
                 className="relative flex items-center gap-2 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 hover:border-emerald-500/50 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all shadow-md active:scale-95"
@@ -479,7 +466,6 @@ export default function Home() {
                 )}
               </Link>
 
-              {/* Logowanie / Rejestracja / Profil */}
               {!currentUser ? (
                 <button
                   onClick={() => {
@@ -506,19 +492,19 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Oryginalny, klasyczny tekst nagłówka */}
+          {/* Przywrócona oryginalna treść nagłówka */}
           <div className="my-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
             <div className="lg:col-span-2">
-              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-emerald-400 uppercase drop-shadow-lg">
+              <h1 className="text-3xl md:text-5xl font-black tracking-tight text-emerald-400 drop-shadow-md">
                 ROAD TO GOAT
               </h1>
-              <p className="text-neutral-300 text-xs md:text-sm mt-3 max-w-xl leading-relaxed">
+              <p className="text-neutral-200 text-xs md:text-sm mt-3 max-w-xl leading-relaxed drop-shadow">
                 Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
               </p>
             </div>
 
-            {/* KALENDARZ ZAWODÓW (Rzut okiem) */}
-            <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
+            {/* Karta zawodów */}
+            <div className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
               <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
                 <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
                   <span>🏆</span> Cel Startowy
@@ -559,7 +545,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Kapsuła akcji */}
+          {/* Przyciski operacyjne */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div className="flex flex-wrap items-center gap-2.5">
               <button
@@ -634,12 +620,11 @@ export default function Home() {
         </div>
 
         <input
-          type="text"
-          placeholder={`Wyszukaj w sekcji ${activeCategory}...`}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-        />
+  type="text"
+  value={searchTerm}
+  onChange={(e) => setSearchTerm(e.target.value)}
+  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+/>
 
         {activeCategory !== "Własne treningi" && (
           <div className="space-y-3 select-none">
@@ -685,7 +670,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* KAFELKI */}
+        {/* Kafelki */}
         {loading ? (
           <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
             Ładowanie bazy...
@@ -824,7 +809,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* MODAL LOGOWANIA I REJESTRACJI (BEZ MAILA) */}
+      {/* MODAL LOGOWANIA */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
@@ -879,7 +864,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
-                  className="text-xs text-emerald-400 hover:underline"
+                  className="text-xs text-emerald-400 hover:underline cursor-pointer"
                 >
                   {authMode === "login" ? "Nie masz konta? Stwórz" : "Masz konto? Zaloguj"}
                 </button>
@@ -888,13 +873,13 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setIsAuthModalOpen(false)}
-                    className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
+                    className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white cursor-pointer"
                   >
                     Anuluj
                   </button>
                   <button
                     type="submit"
-                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
+                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all cursor-pointer"
                   >
                     {authMode === "login" ? "Wejdź" : "Załóż"}
                   </button>
@@ -964,13 +949,13 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setIsCompModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
+                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white cursor-pointer"
                 >
                   Anuluj
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all cursor-pointer"
                 >
                   Zapisz
                 </button>
@@ -1128,13 +1113,13 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white"
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
                 >
                   Anuluj
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
                 >
                   {editingExerciseId ? "Zapisz zmiany" : "Dodaj"}
                 </button>
