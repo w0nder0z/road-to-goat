@@ -111,14 +111,14 @@ const STANDARD_DIFFICULTIES = [
 const TEAM_PASSWORD = "Kawashi2026";
 const COACH_PIN = "69420";
 
-// 6 zdjęć karuzeli (wrzuć je do folderu public/hero/ lub zmień nazwy na własne)
+// Grafiki bez myślników
 const HERO_IMAGES = [
-  "/hero/hero-1.jpg",
-  "/hero/hero-2.jpg",
-  "/hero/hero-3.jpg",
-  "/hero/hero-4.jpg",
-  "/hero/hero-5.jpg",
-  "/hero/hero-6.jpg",
+  "/hero/hero1.jpg",
+  "/hero/hero2.jpg",
+  "/hero/hero3.jpg",
+  "/hero/hero4.jpg",
+  "/hero/hero5.jpg",
+  "/hero/hero6.jpg",
 ];
 
 export default function Home() {
@@ -129,19 +129,21 @@ export default function Home() {
   const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Karuzela Hero (zmiana co 10 sekund)
+  // Karuzela w tle (zmiana co 10 sekund)
   const [currentHeroIdx, setCurrentHeroIdx] = useState(0);
 
-  // Status powiadomień Timeline
+  // Kropka powiadomienia
   const [hasNewTimelinePosts, setHasNewTimelinePosts] = useState(false);
 
-  // Role: guest / member / coach
-  const [userRole, setUserRole] = useState<"guest" | "member" | "coach">("guest");
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [loginInputPass, setLoginInputPass] = useState("");
-  const [loginIsCoachCheck, setLoginIsCoachCheck] = useState(false);
+  // System użytkownika (Nick + Rola)
+  const [currentUser, setCurrentUser] = useState<{ username: string; role: "athlete" | "coach" } | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authIsCoach, setAuthIsCoach] = useState(false);
 
-  // Kalendarz zawodów
+  // Zawody & Kalendarz
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
   const [compForm, setCompForm] = useState({
@@ -158,7 +160,6 @@ export default function Home() {
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
 
-  // Formularz ćwiczeń
   const [formData, setFormData] = useState({
     title: "",
     category: "Tricking",
@@ -170,13 +171,38 @@ export default function Home() {
     prerequisite_ids: [] as string[],
   });
 
-  // Bardzo wolne przejście karuzeli (10000ms = 10s)
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentHeroIdx((prev) => (prev + 1) % HERO_IMAGES.length);
     }, 10000);
     return () => clearInterval(timer);
   }, []);
+
+  const checkTimelineUnread = async (userLoggedIn: boolean) => {
+    if (!userLoggedIn) {
+      setHasNewTimelinePosts(false);
+      return;
+    }
+
+    const { data: latestPost } = await supabase
+      .from("progress_submissions")
+      .select("created_at")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (latestPost && latestPost.length > 0) {
+      const latestPostTime = new Date(latestPost[0].created_at).getTime();
+      const lastReadTimeStr = localStorage.getItem("timeline_last_read");
+      const lastReadTime = lastReadTimeStr ? parseInt(lastReadTimeStr, 10) : 0;
+
+      // Kropka świeci TYLKO gdy data wpisu jest nowsza niż moment ostatniego wejścia
+      if (latestPostTime > lastReadTime) {
+        setHasNewTimelinePosts(true);
+      } else {
+        setHasNewTimelinePosts(false);
+      }
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -194,55 +220,101 @@ export default function Home() {
 
     if (compData) setCompetitions(compData);
 
-    const { data: recentPosts } = await supabase
-      .from("progress_submissions")
-      .select("id, created_at")
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (recentPosts && recentPosts.length > 0) {
-      const lastPostDate = new Date(recentPosts[0].created_at).getTime();
-      const twoDaysAgo = Date.now() - 48 * 60 * 60 * 1000;
-      if (lastPostDate > twoDaysAgo) {
-        setHasNewTimelinePosts(true);
-      }
-    }
-
     setLoading(false);
   };
 
   useEffect(() => {
     fetchData();
-    const storedRole = localStorage.getItem("goat_user_role") as "member" | "coach" | null;
-    if (storedRole) setUserRole(storedRole);
+
+    // Odczyt profilu z localStorage
+    const savedUserStr = localStorage.getItem("goat_athlete_profile");
+    if (savedUserStr) {
+      try {
+        const parsed = JSON.parse(savedUserStr);
+        setCurrentUser(parsed);
+        checkTimelineUnread(true);
+      } catch {
+        setCurrentUser(null);
+      }
+    }
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Obsługa Logowania / Rejestracji bez maila
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginIsCoachCheck) {
-      if (loginInputPass === COACH_PIN) {
-        setUserRole("coach");
-        localStorage.setItem("goat_user_role", "coach");
-        setIsLoginModalOpen(false);
-        setLoginInputPass("");
-      } else {
-        alert("Błędny PIN Trenera / Admina!");
+    const cleanNick = authUsername.trim();
+
+    if (!cleanNick) {
+      alert("Podaj swój nick!");
+      return;
+    }
+
+    // Walidacja hasła
+    if (authIsCoach) {
+      if (authPassword !== COACH_PIN) {
+        alert("Błędny PIN Trenera!");
+        return;
       }
     } else {
-      if (loginInputPass === TEAM_PASSWORD) {
-        setUserRole("member");
-        localStorage.setItem("goat_user_role", "member");
-        setIsLoginModalOpen(false);
-        setLoginInputPass("");
-      } else {
-        alert("Błędne hasło drużyny!");
+      if (authPassword !== TEAM_PASSWORD) {
+        alert("Błędne hasło drużyny (wpisz Kawashi2026)!");
+        return;
       }
+    }
+
+    const assignedRole: "athlete" | "coach" = authIsCoach ? "coach" : "athlete";
+
+    if (authMode === "register") {
+      // Rejestracja nowego nicku
+      const { data, error } = await supabase
+        .from("athlete_profiles")
+        .insert([{ username: cleanNick, role: assignedRole }])
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === "23505") {
+          alert("Ten nick jest już zajęty! Jeśli to Twoje konto, kliknij 'Masz już konto? Zaloguj się'.");
+        } else {
+          alert("Błąd rejestracji: " + error.message);
+        }
+        return;
+      }
+
+      const userObj = { username: cleanNick, role: assignedRole };
+      setCurrentUser(userObj);
+      localStorage.setItem("goat_athlete_profile", JSON.stringify(userObj));
+      setIsAuthModalOpen(false);
+      setAuthUsername("");
+      setAuthPassword("");
+      checkTimelineUnread(true);
+    } else {
+      // Logowanie
+      const { data, error } = await supabase
+        .from("athlete_profiles")
+        .select("*")
+        .eq("username", cleanNick)
+        .single();
+
+      if (error || !data) {
+        alert("Nie znaleziono takiego konta. Kliknij 'Stwórz nowe konto' poniżej.");
+        return;
+      }
+
+      const userObj = { username: data.username, role: assignedRole };
+      setCurrentUser(userObj);
+      localStorage.setItem("goat_athlete_profile", JSON.stringify(userObj));
+      setIsAuthModalOpen(false);
+      setAuthUsername("");
+      setAuthPassword("");
+      checkTimelineUnread(true);
     }
   };
 
   const handleLogout = () => {
-    setUserRole("guest");
-    localStorage.removeItem("goat_user_role");
+    setCurrentUser(null);
+    localStorage.removeItem("goat_athlete_profile");
+    setHasNewTimelinePosts(false);
   };
 
   const toggleExpand = (id: string) => {
@@ -363,9 +435,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
-      {/* SEKCJA HERO ZE ZMIENIAJĄCĄ SIĘ POWOLI KARUZELĄ (6 ZDJĘĆ) */}
+      {/* SEKCJA HERO ZE ZDJĘCIAMI (hero1.jpg - hero6.jpg) */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
-        {/* Kontener karuzeli w tle */}
         <div className="absolute inset-0 overflow-hidden">
           {HERO_IMAGES.map((src, idx) => (
             <div
@@ -376,32 +447,31 @@ export default function Home() {
               style={{ backgroundImage: `url('${src}')` }}
             />
           ))}
-          {/* Gradient przyciemniający */}
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/75 to-neutral-950/40" />
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-neutral-950/40" />
         </div>
 
         <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-8 pb-10 flex flex-col justify-between min-h-[320px]">
-          {/* Top Bar z logowaniem i Timeline */}
+          {/* Top Bar */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase tracking-widest font-extrabold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-3 py-1 rounded-full">
                 ROAD TO GOAT
               </span>
-              {userRole === "coach" && (
+              {currentUser?.role === "coach" && (
                 <span className="text-[10px] uppercase font-bold tracking-wider bg-red-950/80 text-red-400 border border-red-800 px-2 py-0.5 rounded-full">
-                  Admin Trener
+                  Trener / Admin
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Oś czasu z czerwoną chmurką */}
+              {/* Timeline z kropką */}
               <Link
                 href="/timeline"
                 className="relative flex items-center gap-2 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 hover:border-emerald-500/50 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all shadow-md active:scale-95"
               >
                 <span>🎬 Timeline</span>
-                {hasNewTimelinePosts && (
+                {currentUser && hasNewTimelinePosts && (
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
@@ -409,35 +479,41 @@ export default function Home() {
                 )}
               </Link>
 
-              {userRole === "guest" ? (
+              {/* Logowanie / Rejestracja / Profil */}
+              {!currentUser ? (
                 <button
-                  onClick={() => setIsLoginModalOpen(true)}
+                  onClick={() => {
+                    setAuthMode("login");
+                    setIsAuthModalOpen(true);
+                  }}
                   className="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-xs px-3 py-1.5 rounded-xl text-neutral-300 hover:text-white transition-all cursor-pointer"
                 >
-                  🔐 Zaloguj
+                  👤 Zaloguj / Rejestracja
                 </button>
               ) : (
-                <button
-                  onClick={handleLogout}
-                  className="bg-neutral-900/90 hover:bg-red-950/50 border border-neutral-800 hover:border-red-800 text-xs px-3 py-1.5 rounded-xl text-neutral-400 hover:text-red-300 transition-all cursor-pointer"
-                >
-                  Wyloguj ({userRole === "coach" ? "Trener" : "Team"})
-                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-emerald-400 font-semibold bg-neutral-900/80 border border-neutral-800 px-2.5 py-1 rounded-xl">
+                    {currentUser.username}
+                  </span>
+                  <button
+                    onClick={handleLogout}
+                    className="bg-neutral-900/90 hover:bg-red-950/50 border border-neutral-800 hover:border-red-800 text-xs px-2.5 py-1 rounded-xl text-neutral-400 hover:text-red-300 transition-all cursor-pointer"
+                  >
+                    Wyloguj
+                  </button>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Tytuł i Minimalistyczny Kalendarz Startowy */}
+          {/* Oryginalny, klasyczny tekst nagłówka */}
           <div className="my-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
             <div className="lg:col-span-2">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase drop-shadow-lg">
-                Mistrzowski Poziom <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">
-                  Krok po kroku
-                </span>
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-emerald-400 uppercase drop-shadow-lg">
+                ROAD TO GOAT
               </h1>
               <p className="text-neutral-300 text-xs md:text-sm mt-3 max-w-xl leading-relaxed">
-                Struktura, progresje trickingowe, przygotowanie motoryczne i monitoring formy.
+                Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
               </p>
             </div>
 
@@ -447,7 +523,7 @@ export default function Home() {
                 <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
                   <span>🏆</span> Cel Startowy
                 </span>
-                {userRole === "coach" && (
+                {currentUser?.role === "coach" && (
                   <button
                     onClick={() => setIsCompModalOpen(true)}
                     className="text-[10px] text-emerald-400 hover:underline cursor-pointer"
@@ -483,7 +559,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Kapsuła akcji: Dostępna dla wszystkich zawodników */}
+          {/* Kapsuła akcji */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div className="flex flex-wrap items-center gap-2.5">
               <button
@@ -521,7 +597,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Wskaźnik kropkowy aktualnego slajdu karuzeli */}
             <div className="hidden sm:flex items-center gap-1.5 opacity-60">
               {HERO_IMAGES.map((_, i) => (
                 <div
@@ -610,7 +685,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* KAFELKI Z ROZWIJANIEM */}
+        {/* KAFELKI */}
         {loading ? (
           <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
             Ładowanie bazy...
@@ -689,7 +764,7 @@ export default function Home() {
                       )}
 
                       <div className="flex items-center justify-between pt-1">
-                        {userRole === "coach" ? (
+                        {currentUser?.role === "coach" ? (
                           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={(e) => {
@@ -749,22 +824,40 @@ export default function Home() {
         )}
       </div>
 
-      {/* MODAL LOGOWANIA */}
-      {isLoginModalOpen && (
+      {/* MODAL LOGOWANIA I REJESTRACJI (BEZ MAILA) */}
+      {isAuthModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-2">🔐 Dostęp do platformy</h2>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <h2 className="text-lg font-bold text-white mb-1">
+              {authMode === "login" ? "🔐 Zaloguj się" : "📝 Załóż konto zawodnika"}
+            </h2>
+            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
+              Wystarczy unikalny nick oraz hasło drużyny (lub PIN trenera).
+            </p>
+
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Twój Nick / Imię *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="np. Piotrek, Tricker99"
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">
-                  {loginIsCoachCheck ? "PIN Trenera (Admin)" : "Hasło Drużyny"}
+                  {authIsCoach ? "PIN Trenera (Admin)" : "Hasło Drużyny (Kawashi2026)"} *
                 </label>
                 <input
                   type="password"
                   required
-                  placeholder={loginIsCoachCheck ? "PIN..." : "Hasło..."}
-                  value={loginInputPass}
-                  onChange={(e) => setLoginInputPass(e.target.value)}
+                  placeholder={authIsCoach ? "Wpisz PIN..." : "Wpisz hasło..."}
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -772,30 +865,40 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  id="coachCheck"
-                  checked={loginIsCoachCheck}
-                  onChange={(e) => setLoginIsCoachCheck(e.target.checked)}
+                  id="authCoach"
+                  checked={authIsCoach}
+                  onChange={(e) => setAuthIsCoach(e.target.checked)}
                   className="rounded border-neutral-800 bg-neutral-950 text-emerald-500 focus:ring-0 cursor-pointer"
                 />
-                <label htmlFor="coachCheck" className="text-xs text-neutral-300 cursor-pointer select-none">
-                  Logowanie jako Trener (Admin)
+                <label htmlFor="authCoach" className="text-xs text-neutral-300 cursor-pointer select-none">
+                  Konto Trenera / Admina
                 </label>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-between items-center pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsLoginModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
+                  onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}
+                  className="text-xs text-emerald-400 hover:underline"
                 >
-                  Anuluj
+                  {authMode === "login" ? "Nie masz konta? Stwórz" : "Masz konto? Zaloguj"}
                 </button>
-                <button
-                  type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
-                >
-                  Zaloguj
-                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAuthModalOpen(false)}
+                    className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
+                  >
+                    Anuluj
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
+                  >
+                    {authMode === "login" ? "Wejdź" : "Załóż"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
