@@ -43,13 +43,13 @@ export default function ExerciseDetailPage() {
   const [submissions, setSubmissions] = useState<ProgressSubmission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Indeks aktualnie wyświetlanego wideo w karuzeli
+  // Indeks aktualnego źródła w karuzeli
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState({ athlete_name: "", video_url: "", notes: "" });
 
-  // Inteligentny parser URL (zwraca embed gotowy do iframe)
+  // Konwersja na format iframe
   const parseVideoEmbed = (url: string) => {
     if (!url) return "";
     if (url.includes("drive.google.com/file/d/")) {
@@ -68,10 +68,22 @@ export default function ExerciseDetailPage() {
       const videoId = url.split("youtu.be/")[1]?.split("?")[0];
       return `https://www.youtube.com/embed/${videoId}`;
     }
-    if (url.includes("youtube.com/embed/")) {
-      return url;
+    if (url.includes("open.spotify.com/playlist/")) {
+      const playlistId = url.split("playlist/")[1]?.split("?")[0];
+      return `https://open.spotify.com/embed/playlist/${playlistId}?utm_source=generator&theme=0`;
     }
     return url;
+  };
+
+  // Sprawdzenie, czy serwis zezwala na osadzanie w ramce iframe
+  const isEmbeddable = (url: string) => {
+    if (!url) return false;
+    return (
+      url.includes("youtube.com") ||
+      url.includes("youtu.be") ||
+      url.includes("drive.google.com") ||
+      url.includes("spotify.com")
+    );
   };
 
   const fetchDetailAndTree = async () => {
@@ -162,12 +174,16 @@ export default function ExerciseDetailPage() {
     );
   }
 
-  // Lista materiałów źródłowych
-  const allSources = (exercise.sources && exercise.sources.length > 0)
-    ? exercise.sources
-    : (exercise.video_url ? [exercise.video_url] : []);
+  const allSources =
+    exercise.sources && exercise.sources.length > 0
+      ? exercise.sources
+      : exercise.video_url
+      ? [exercise.video_url]
+      : [];
 
-  const currentSourceUrl = allSources[currentVideoIndex] ? parseVideoEmbed(allSources[currentVideoIndex]) : "";
+  const rawCurrentUrl = allSources[currentVideoIndex] || "";
+  const embedCurrentUrl = parseVideoEmbed(rawCurrentUrl);
+  const canEmbed = isEmbeddable(rawCurrentUrl);
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
@@ -206,30 +222,56 @@ export default function ExerciseDetailPage() {
             </p>
           )}
 
-          {/* ODTWARZACZ WIDEO ZE STRZAŁKAMI PRZEŁĄCZANIA (CAROUSEL PLAYER) */}
+          {/* ODTWARZACZ WIDEO ZE STRZAŁKAMI I AWARYJNYM PRZYCISKIEM */}
           {allSources.length > 0 ? (
             <div className="mb-6 space-y-3">
               <div className="relative rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800 shadow-2xl group">
-                <iframe
-                  src={currentSourceUrl}
-                  title={`${exercise.title} - źródło ${currentVideoIndex + 1}`}
-                  className="w-full h-full"
-                  allow="autoplay; encrypted-media; fullscreen"
-                  allowFullScreen
-                />
+                {canEmbed ? (
+                  <iframe
+                    src={embedCurrentUrl}
+                    title={`${exercise.title} - źródło ${currentVideoIndex + 1}`}
+                    className="w-full h-full"
+                    allow="autoplay; encrypted-media; fullscreen"
+                    allowFullScreen
+                  />
+                ) : (
+                  /* KARTA GDY STRONA BLOKUJE IFRAME (NP. LOOPKICKS) */
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-neutral-900/90">
+                    <span className="text-4xl mb-3">🔗</span>
+                    <h3 className="text-white font-bold text-base mb-1">
+                      Materiał ze strony zewnętrznej
+                    </h3>
+                    <p className="text-xs text-neutral-400 max-w-sm mb-4 leading-relaxed">
+                      Ta witryna blokuje osadzanie w ramkach. Możesz otworzyć pełny poradnik i materiał bezpośrednio pod źródłowym adresem.
+                    </p>
+                    <a
+                      href={rawCurrentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center gap-1.5"
+                    >
+                      <span>Otwórz stronę źródłową</span>
+                      <span>↗</span>
+                    </a>
+                  </div>
+                )}
 
-                {/* Strzałki boczne, jeśli jest więcej niż jedno wideo */}
+                {/* Strzałki zmiany źródła */}
                 {allSources.length > 1 && (
                   <>
                     <button
-                      onClick={() => setCurrentVideoIndex((prev) => (prev > 0 ? prev - 1 : allSources.length - 1))}
+                      onClick={() =>
+                        setCurrentVideoIndex((prev) => (prev > 0 ? prev - 1 : allSources.length - 1))
+                      }
                       className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-emerald-500 hover:text-black text-white w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg backdrop-blur-sm transition-all shadow-lg cursor-pointer"
                       title="Poprzednie wideo"
                     >
                       ‹
                     </button>
                     <button
-                      onClick={() => setCurrentVideoIndex((prev) => (prev < allSources.length - 1 ? prev + 1 : 0))}
+                      onClick={() =>
+                        setCurrentVideoIndex((prev) => (prev < allSources.length - 1 ? prev + 1 : 0))
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-emerald-500 hover:text-black text-white w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg backdrop-blur-sm transition-all shadow-lg cursor-pointer"
                       title="Następne wideo"
                     >
@@ -239,25 +281,42 @@ export default function ExerciseDetailPage() {
                 )}
               </div>
 
-              {/* Informacja o aktualnym wideo i kropki przełączania */}
-              {allSources.length > 1 && (
-                <div className="flex items-center justify-between text-xs text-neutral-400 px-1 select-none">
-                  <span>
-                    Materiał wideo: <strong>{currentVideoIndex + 1}</strong> z {allSources.length}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {allSources.map((_, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setCurrentVideoIndex(idx)}
-                        className={`h-2 rounded-full transition-all cursor-pointer ${
-                          currentVideoIndex === idx ? "w-6 bg-emerald-400" : "w-2 bg-neutral-700"
-                        }`}
-                      />
-                    ))}
-                  </div>
+              {/* Pasek nawigacyjny źródeł + Bezpośredni link awaryjny */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-neutral-400 px-1 select-none">
+                <div className="flex items-center gap-2">
+                  {allSources.length > 1 ? (
+                    <>
+                      <span>
+                        Materiał: <strong>{currentVideoIndex + 1}</strong> z {allSources.length}
+                      </span>
+                      <div className="flex items-center gap-1.5 ml-2">
+                        {allSources.map((_, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setCurrentVideoIndex(idx)}
+                            className={`h-2 rounded-full transition-all cursor-pointer ${
+                              currentVideoIndex === idx ? "w-6 bg-emerald-400" : "w-2 bg-neutral-700"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <span>Materiał wideo powiązany z ćwiczeniem</span>
+                  )}
                 </div>
-              )}
+
+                {/* Bezpośredni link ratunkowy do pliku/strony */}
+                <a
+                  href={rawCurrentUrl.replace("/preview", "/view")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 self-start sm:self-auto"
+                >
+                  <span>🔗 Problemy z odtwarzaniem? Otwórz bezpośrednio w nowej karcie</span>
+                  <span>↗</span>
+                </a>
+              </div>
             </div>
           ) : (
             <div className="p-8 text-center border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-xs mb-6">
@@ -282,7 +341,10 @@ export default function ExerciseDetailPage() {
               <div className="flex flex-wrap gap-1.5 select-none">
                 {exercise.joints && exercise.joints.length > 0 ? (
                   exercise.joints.map((joint) => (
-                    <span key={joint} className="text-xs bg-neutral-800 text-neutral-200 px-2.5 py-1 rounded-lg border border-neutral-700">
+                    <span
+                      key={joint}
+                      className="text-xs bg-neutral-800 text-neutral-200 px-2.5 py-1 rounded-lg border border-neutral-700"
+                    >
                       🦴 {joint}
                     </span>
                   ))
@@ -297,7 +359,10 @@ export default function ExerciseDetailPage() {
               <div className="flex flex-wrap gap-1.5 select-none">
                 {exercise.muscles && exercise.muscles.length > 0 ? (
                   exercise.muscles.map((muscle) => (
-                    <span key={muscle} className="text-xs bg-emerald-950/40 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-900/50">
+                    <span
+                      key={muscle}
+                      className="text-xs bg-emerald-950/40 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-900/50"
+                    >
                       ⚡ {muscle}
                     </span>
                   ))
@@ -396,7 +461,10 @@ export default function ExerciseDetailPage() {
           ) : (
             <div className="space-y-6">
               {submissions.map((sub) => (
-                <div key={sub.id} className="bg-neutral-950/80 border border-neutral-800 rounded-2xl p-5 space-y-3">
+                <div
+                  key={sub.id}
+                  className="bg-neutral-950/80 border border-neutral-800 rounded-2xl p-5 space-y-3"
+                >
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm text-neutral-200">{sub.athlete_name}</span>
                     <span className="text-[11px] text-neutral-500">
@@ -405,13 +473,25 @@ export default function ExerciseDetailPage() {
                   </div>
 
                   {sub.video_url && (
-                    <div className="rounded-xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800">
-                      <iframe
-                        src={sub.video_url}
-                        title={`Próba ${sub.athlete_name}`}
-                        className="w-full h-full"
-                        allowFullScreen
-                      />
+                    <div className="space-y-1">
+                      <div className="rounded-xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800">
+                        <iframe
+                          src={sub.video_url}
+                          title={`Próba ${sub.athlete_name}`}
+                          className="w-full h-full"
+                          allowFullScreen
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <a
+                          href={sub.video_url.replace("/preview", "/view")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-emerald-400 hover:underline"
+                        >
+                          Otwórz nagranie w nowej karcie ↗
+                        </a>
+                      </div>
                     </div>
                   )}
 
@@ -445,10 +525,11 @@ export default function ExerciseDetailPage() {
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Link do wideo (YouTube / Google Drive) *</label>
+                <label className="text-xs text-neutral-400 block mb-1">Link do wideo *</label>
                 <input
                   type="text"
                   required
+                  placeholder="YouTube, Shorts lub link z Dysku Google"
                   value={form.video_url}
                   onChange={(e) => setForm({ ...form, video_url: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -469,13 +550,13 @@ export default function ExerciseDetailPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white"
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
                 >
                   Anuluj
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
                 >
                   Zapisz próbę
                 </button>
