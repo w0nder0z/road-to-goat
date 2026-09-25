@@ -14,14 +14,14 @@ interface ProgressItem {
   created_at: string;
 }
 
-const COACH_PIN = "69420";
+const COACH_PIN = "1234";
 
 export default function TimelinePage() {
   const [submissions, setSubmissions] = useState<ProgressItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Uprawnienia trenera
-  const [isCoach, setIsCoach] = useState(false);
+  // Status profilu i uprawnień
+  const [currentUser, setCurrentUser] = useState<{ username: string; role: "athlete" | "coach" } | null>(null);
 
   // Modal (dodawanie i edycja)
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,24 +60,37 @@ export default function TimelinePage() {
   };
 
   useEffect(() => {
-    fetchData();
-    const savedRole = localStorage.getItem("coach_access");
-    if (savedRole === "true") {
-      setIsCoach(true);
+    // 1. Zapisanie czasu wejścia – natychmiast gasi czerwoną kropkę na stronie głównej
+    localStorage.setItem("timeline_last_read", Date.now().toString());
+
+    // 2. Odczyt zalogowanego profilu
+    const savedUserStr = localStorage.getItem("goat_athlete_profile");
+    if (savedUserStr) {
+      try {
+        const parsed = JSON.parse(savedUserStr);
+        setCurrentUser(parsed);
+        setForm((prev) => ({ ...prev, athlete_name: parsed.username }));
+      } catch {
+        setCurrentUser(null);
+      }
     }
+
+    fetchData();
   }, []);
 
   const handleToggleCoach = () => {
-    if (isCoach) {
-      setIsCoach(false);
-      localStorage.removeItem("coach_access");
+    if (currentUser?.role === "coach") {
+      const downgraded = { username: currentUser.username, role: "athlete" as const };
+      setCurrentUser(downgraded);
+      localStorage.setItem("goat_athlete_profile", JSON.stringify(downgraded));
     } else {
-      const pin = prompt("Podaj kod dostępu Trenera / Admina:");
+      const pin = prompt("Podaj PIN Trenera / Admina:");
       if (pin === COACH_PIN) {
-        setIsCoach(true);
-        localStorage.setItem("coach_access", "true");
+        const upgraded = { username: currentUser?.username || "Trener", role: "coach" as const };
+        setCurrentUser(upgraded);
+        localStorage.setItem("goat_athlete_profile", JSON.stringify(upgraded));
       } else if (pin !== null) {
-        alert("Nieprawidłowy kod dostępu.");
+        alert("Nieprawidłowy PIN.");
       }
     }
   };
@@ -85,7 +98,7 @@ export default function TimelinePage() {
   const formatVideoUrl = (url: string) => {
     if (!url) return "";
 
-    // Dysk Google
+    // Google Drive
     if (url.includes("drive.google.com/file/d/")) {
       const fileId = url.split("/d/")[1]?.split("/")[0];
       return `https://drive.google.com/file/d/${fileId}/preview`;
@@ -97,7 +110,7 @@ export default function TimelinePage() {
       return `https://www.youtube.com/embed/${videoId}`;
     }
 
-    // YouTube watch
+    // YouTube standard
     if (url.includes("youtube.com/watch?v=")) {
       const videoId = url.split("v=")[1]?.split("&")[0];
       return `https://www.youtube.com/embed/${videoId}`;
@@ -115,7 +128,7 @@ export default function TimelinePage() {
   const handleOpenAdd = () => {
     setEditingId(null);
     setForm({
-      athlete_name: "",
+      athlete_name: currentUser?.username || "",
       exercise_id: exercisesList[0]?.id || "",
       exercise_title: exercisesList[0]?.title || "",
       video_url: "",
@@ -149,7 +162,6 @@ export default function TimelinePage() {
     };
 
     if (editingId) {
-      // EDYCJA (UPDATE)
       const { data, error } = await supabase
         .from("progress_submissions")
         .update(payload)
@@ -166,7 +178,6 @@ export default function TimelinePage() {
         alert("Błąd zapisu zmian: " + error.message);
       }
     } else {
-      // NOWY WPIS (INSERT)
       const { data, error } = await supabase
         .from("progress_submissions")
         .insert([payload])
@@ -175,14 +186,19 @@ export default function TimelinePage() {
       if (!error && data) {
         setSubmissions((prev) => [data[0], ...prev]);
         setIsModalOpen(false);
+        setForm((prev) => ({
+          ...prev,
+          video_url: "",
+          notes: "",
+        }));
       } else if (error) {
-        alert("Błąd: " + error.message);
+        alert("Błąd dodawania: " + error.message);
       }
     }
   };
 
   const handleDeleteSubmission = async (id: string, athlete: string) => {
-    if (!confirm(`Czy jako Trener chcesz usunąć nagranie zawodnika "${athlete}"?`)) {
+    if (!confirm(`Czy na pewno usunąć nagranie zawodnika "${athlete}"?`)) {
       return;
     }
 
@@ -198,7 +214,7 @@ export default function TimelinePage() {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Nawigacja */}
+        {/* Nawigacja powrotu i panel akcji */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800/80 pb-4 select-none">
           <Link
             href="/"
@@ -209,15 +225,16 @@ export default function TimelinePage() {
           </Link>
 
           <div className="flex items-center gap-2.5">
+            {/* Przełącznik Trenera */}
             <button
               onClick={handleToggleCoach}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
-                isCoach
+                currentUser?.role === "coach"
                   ? "bg-neutral-800 text-emerald-400 border-emerald-500/50 hover:bg-neutral-700"
                   : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white"
               }`}
             >
-              {isCoach ? "🔒 Trener" : "🔑 Trener"}
+              {currentUser?.role === "coach" ? "🔒 Trener" : "🔑 Trener"}
             </button>
 
             <button
@@ -235,18 +252,18 @@ export default function TimelinePage() {
             <h1 className="text-3xl font-extrabold text-white flex items-center gap-2">
               <span>🎬</span> Oś Czasu & Feed Progresu
             </h1>
-            {isCoach && (
+            {currentUser?.role === "coach" && (
               <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-md">
                 Tryb Trenera
               </span>
             )}
           </div>
           <p className="text-neutral-400 text-sm mt-1 leading-relaxed">
-            Tutaj trafiają wszystkie próby, sukcesy i analizy techniczne zawodników z całej platformy.
+            Wszystkie nagrania, ewolucje i próby z sali treningowej w jednym miejscu.
           </p>
         </div>
 
-        {/* Lista wideo */}
+        {/* Lista wideo w osi czasu */}
         {loading ? (
           <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
             Ładowanie feedu nagrań...
@@ -284,8 +301,8 @@ export default function TimelinePage() {
                       🎯 {sub.exercise_title}
                     </span>
 
-                    {/* Przyciski Trenera: Edytuj i Usuń */}
-                    {isCoach && (
+                    {/* Narzędzia Trenera */}
+                    {currentUser?.role === "coach" && (
                       <div className="flex items-center gap-1.5 ml-2">
                         <button
                           onClick={() => handleOpenEdit(sub)}
@@ -318,7 +335,6 @@ export default function TimelinePage() {
                         allowFullScreen
                       />
                     </div>
-                    {/* Link zapasowy dla Dysku Google */}
                     {sub.video_url.includes("drive.google.com") && (
                       <div className="flex justify-end">
                         <a
@@ -327,7 +343,7 @@ export default function TimelinePage() {
                           rel="noopener noreferrer"
                           className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1"
                         >
-                          <span>🔗 Otwórz wideo bezpośrednio w Google Drive</span>
+                          <span>🔗 Otwórz bezpośrednio na Google Drive</span>
                         </a>
                       </div>
                     )}
@@ -402,7 +418,7 @@ export default function TimelinePage() {
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
                 <p className="text-[11px] text-neutral-500 mt-1 leading-normal">
-                  💡 <strong>Tip Google Drive:</strong> W Dysku Google kliknij <em>Udostępnij</em> i zaznacz: <strong>„Każda osoba mająca link (Przeglądający)”</strong>. Na YouTube możesz wybrać <strong>Niepubliczny (Unlisted)</strong>.
+                  💡 <strong>Wskazówka:</strong> W Dysku Google wybierz <em>„Każda osoba mająca link”</em>. Na YouTube film może być <strong>Niepubliczny (Unlisted)</strong>.
                 </p>
               </div>
 

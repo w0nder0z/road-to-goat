@@ -109,7 +109,17 @@ const STANDARD_DIFFICULTIES = [
 ];
 
 const TEAM_PASSWORD = "Kawashi2026";
-const COACH_PIN = "1234";
+const COACH_PIN = "69420";
+
+// 6 zdjęć karuzeli (wrzuć je do folderu public/hero/ lub zmień nazwy na własne)
+const HERO_IMAGES = [
+  "/hero/hero-1.jpg",
+  "/hero/hero-2.jpg",
+  "/hero/hero-3.jpg",
+  "/hero/hero-4.jpg",
+  "/hero/hero-5.jpg",
+  "/hero/hero-6.jpg",
+];
 
 export default function Home() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -119,16 +129,19 @@ export default function Home() {
   const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Powiadomienie Timeline
+  // Karuzela Hero (zmiana co 10 sekund)
+  const [currentHeroIdx, setCurrentHeroIdx] = useState(0);
+
+  // Status powiadomień Timeline
   const [hasNewTimelinePosts, setHasNewTimelinePosts] = useState(false);
 
-  // Status logowania (Konto / Trener)
+  // Role: guest / member / coach
   const [userRole, setUserRole] = useState<"guest" | "member" | "coach">("guest");
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [loginInputPass, setLoginInputPass] = useState("");
   const [loginIsCoachCheck, setLoginIsCoachCheck] = useState(false);
 
-  // Kalendarz zawodów & Faza przygotowań
+  // Kalendarz zawodów
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
   const [compForm, setCompForm] = useState({
@@ -140,12 +153,12 @@ export default function Home() {
 
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
-  // Modale ćwiczeń i treningów
+  // Modale
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
 
-  // Formularz ćwiczeń z wieloma źródłami
+  // Formularz ćwiczeń
   const [formData, setFormData] = useState({
     title: "",
     category: "Tricking",
@@ -156,6 +169,14 @@ export default function Home() {
     sources: [""] as string[],
     prerequisite_ids: [] as string[],
   });
+
+  // Bardzo wolne przejście karuzeli (10000ms = 10s)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentHeroIdx((prev) => (prev + 1) % HERO_IMAGES.length);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -173,7 +194,6 @@ export default function Home() {
 
     if (compData) setCompetitions(compData);
 
-    // Sprawdzenie czy w Timeline są nowe wpisy z ostatnich 48h
     const { data: recentPosts } = await supabase
       .from("progress_submissions")
       .select("id, created_at")
@@ -306,7 +326,6 @@ export default function Home() {
     }
   };
 
-  // Najbliższe zawody do widgetu w nagłówku
   const nextCompetition = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
     return competitions.find((c) => c.date >= today) || competitions[0];
@@ -344,16 +363,24 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
-      {/* SEKCJA HERO BANNER ZE ZDJĘCIEM W TLE */}
+      {/* SEKCJA HERO ZE ZMIENIAJĄCĄ SIĘ POWOLI KARUZELĄ (6 ZDJĘĆ) */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
-        {/* Zdjęcie z klimatycznym gradientem */}
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-screen scale-105"
-          style={{ backgroundImage: `url('/hero-acro.jpg')` }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-transparent" />
+        {/* Kontener karuzeli w tle */}
+        <div className="absolute inset-0 overflow-hidden">
+          {HERO_IMAGES.map((src, idx) => (
+            <div
+              key={idx}
+              className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out mix-blend-screen scale-105 ${
+                idx === currentHeroIdx ? "opacity-35" : "opacity-0"
+              }`}
+              style={{ backgroundImage: `url('${src}')` }}
+            />
+          ))}
+          {/* Gradient przyciemniający */}
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/75 to-neutral-950/40" />
+        </div>
 
-        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-8 pb-10 flex flex-col justify-between min-h-[300px]">
+        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-8 pb-10 flex flex-col justify-between min-h-[320px]">
           {/* Top Bar z logowaniem i Timeline */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
@@ -367,9 +394,8 @@ export default function Home() {
               )}
             </div>
 
-            {/* Prawy róg: Oś czasu z czerwoną chmurką + Dostęp/Logowanie */}
             <div className="flex items-center gap-3">
-              {/* Timeline z dynamiczną czerwoną kropką powiadomienia */}
+              {/* Oś czasu z czerwoną chmurką */}
               <Link
                 href="/timeline"
                 className="relative flex items-center gap-2 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 hover:border-emerald-500/50 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all shadow-md active:scale-95"
@@ -383,7 +409,6 @@ export default function Home() {
                 )}
               </Link>
 
-              {/* Przycisk Logowania / Profilu */}
               {userRole === "guest" ? (
                 <button
                   onClick={() => setIsLoginModalOpen(true)}
@@ -402,7 +427,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Środek Hero: Tytuł i Minimalistyczny Kalendarz Startowy */}
+          {/* Tytuł i Minimalistyczny Kalendarz Startowy */}
           <div className="my-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
             <div className="lg:col-span-2">
               <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase drop-shadow-lg">
@@ -416,7 +441,7 @@ export default function Home() {
               </p>
             </div>
 
-            {/* MINIMALISTYCZNY KALENDARZ ZAWODÓW (Rzut okiem) */}
+            {/* KALENDARZ ZAWODÓW (Rzut okiem) */}
             <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
               <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
                 <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -458,48 +483,61 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Kapsuła akcji: Stwórz trening + Dodaj pozycję + Zaplanuj zawody */}
-          <div className="flex flex-wrap items-center gap-2.5 pt-2">
-            <button
-              onClick={() => {
-                setEditingExerciseId(null);
-                setFormData({
-                  title: "",
-                  category: activeCategory === "Własne treningi" ? "Tricking" : activeCategory,
-                  subcategory: SUBCATEGORIES_CONFIG[activeCategory === "Własne treningi" ? "Tricking" : activeCategory][1] || "",
-                  difficulty: activeCategory === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
-                  short_description: "",
-                  description: "",
-                  sources: [""],
-                  prerequisite_ids: [],
-                });
-                setIsModalOpen(true);
-              }}
-              className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
-            >
-              + Dodaj pozycję
-            </button>
+          {/* Kapsuła akcji: Dostępna dla wszystkich zawodników */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => {
+                  setEditingExerciseId(null);
+                  setFormData({
+                    title: "",
+                    category: activeCategory === "Własne treningi" ? "Tricking" : activeCategory,
+                    subcategory: SUBCATEGORIES_CONFIG[activeCategory === "Własne treningi" ? "Tricking" : activeCategory][1] || "",
+                    difficulty: activeCategory === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
+                    short_description: "",
+                    description: "",
+                    sources: [""],
+                    prerequisite_ids: [],
+                  });
+                  setIsModalOpen(true);
+                }}
+                className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                + Dodaj pozycję
+              </button>
 
-            <button
-              onClick={() => setIsWorkoutModalOpen(true)}
-              className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
-            >
-              🏋️ Stwórz Trening
-            </button>
+              <button
+                onClick={() => setIsWorkoutModalOpen(true)}
+                className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+              >
+                🏋️ Stwórz Trening
+              </button>
 
-            <button
-              onClick={() => setIsCompModalOpen(true)}
-              className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
-            >
-              🏆 Plan na zawody
-            </button>
+              <button
+                onClick={() => setIsCompModalOpen(true)}
+                className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+              >
+                🏆 Plan na zawody
+              </button>
+            </div>
+
+            {/* Wskaźnik kropkowy aktualnego slajdu karuzeli */}
+            <div className="hidden sm:flex items-center gap-1.5 opacity-60">
+              {HERO_IMAGES.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                    i === currentHeroIdx ? "w-5 bg-emerald-400" : "w-1.5 bg-neutral-600"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ZAWARTOŚĆ GŁÓWNA */}
+      {/* GŁÓWNA SIATKA TRENINGOWA */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
-        {/* Pasek kategorii głównych */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none select-none border-b border-neutral-900 pb-3">
           {MAIN_CATEGORIES.map((cat) => (
             <button
@@ -520,7 +558,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Wyszukiwarka */}
         <input
           type="text"
           placeholder={`Wyszukaj w sekcji ${activeCategory}...`}
@@ -529,7 +566,6 @@ export default function Home() {
           className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
         />
 
-        {/* Pasek podkategorii */}
         {activeCategory !== "Własne treningi" && (
           <div className="space-y-3 select-none">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -551,7 +587,6 @@ export default function Home() {
               ))}
             </div>
 
-            {/* Filtr poziomów dla Trickingu */}
             {activeCategory === "Tricking" && (
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mr-1">
@@ -575,7 +610,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Siatka kart */}
+        {/* KAFELKI Z ROZWIJANIEM */}
         {loading ? (
           <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
             Ładowanie bazy...
@@ -714,15 +749,11 @@ export default function Home() {
         )}
       </div>
 
-      {/* MODAL LOGOWANIA (ZAWODNIK / TRENER) */}
+      {/* MODAL LOGOWANIA */}
       {isLoginModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <h2 className="text-lg font-bold text-white mb-2">🔐 Dostęp do platformy</h2>
-            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Wpisz hasło zespołowe lub wybierz tryb Trenera/Admina.
-            </p>
-
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">
@@ -776,10 +807,9 @@ export default function Home() {
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-lg font-bold text-white mb-2">🏆 Zaplanuj Zawody & Periodyzację</h2>
-
             <form onSubmit={handleSaveCompetition} className="space-y-3">
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Nazwa zawodów / Turnieju *</label>
+                <label className="text-xs text-neutral-400 block mb-1">Nazwa turnieju *</label>
                 <input
                   type="text"
                   required
@@ -801,9 +831,8 @@ export default function Home() {
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                   />
                 </div>
-
                 <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Miasto / Miejsce</label>
+                  <label className="text-xs text-neutral-400 block mb-1">Lokalizacja</label>
                   <input
                     type="text"
                     placeholder="np. Warszawa"
@@ -815,7 +844,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Aktualna faza przygotowań</label>
+                <label className="text-xs text-neutral-400 block mb-1">Faza przygotowań</label>
                 <select
                   value={compForm.phase}
                   onChange={(e) => setCompForm({ ...compForm, phase: e.target.value })}
@@ -840,7 +869,7 @@ export default function Home() {
                   type="submit"
                   className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
                 >
-                  Zapisz Plan
+                  Zapisz
                 </button>
               </div>
             </form>
@@ -848,7 +877,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* MODAL DODAWANIA POZYCJI (Z WIELOMA ŹRÓDŁAMI) */}
+      {/* MODAL DODAWANIA POZYCJI */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -942,17 +971,16 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Wskazówki metodyczne (opis)</label>
+                <label className="text-xs text-neutral-400 block mb-1">Wskazówki metodyczne</label>
                 <textarea
                   rows={2}
-                  placeholder="Technika, spotting..."
+                  placeholder="Technika, błędy..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              {/* ŹRÓDŁA WIDEO */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs text-emerald-400 font-medium">
