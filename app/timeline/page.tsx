@@ -14,7 +14,7 @@ interface ProgressItem {
   created_at: string;
 }
 
-const COACH_PIN = "1234";
+const COACH_PIN = "69420";
 
 export default function TimelinePage() {
   const [submissions, setSubmissions] = useState<ProgressItem[]>([]);

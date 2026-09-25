@@ -13,6 +13,7 @@ interface Exercise {
   short_description: string;
   description?: string;
   video_url?: string;
+  sources?: string[];
   prerequisite_ids?: string[];
   muscles?: string[];
   joints?: string[];
@@ -110,7 +111,7 @@ const STANDARD_DIFFICULTIES = [
   "Zaawansowany / Wyczyn",
 ];
 
-const COACH_PIN = "69420";
+const COACH_PIN = "1234";
 
 export default function Home() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -124,11 +125,9 @@ export default function Home() {
   const [isCoach, setIsCoach] = useState(false);
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
-  // Modal pozycji
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
 
-  // Modal kreatora treningu
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
   const [workoutForm, setWorkoutForm] = useState({
     title: "",
@@ -137,11 +136,11 @@ export default function Home() {
     exercise_ids: [] as string[],
   });
 
-  // Wyszukiwarka drzewka w modalu
   const [prereqQuery, setPrereqQuery] = useState("");
   const [isPrereqDropdownOpen, setIsPrereqDropdownOpen] = useState(false);
   const prereqRef = useRef<HTMLDivElement>(null);
 
+  // Formularz z tablicą źródeł
   const [formData, setFormData] = useState({
     title: "",
     category: "Tricking",
@@ -149,21 +148,19 @@ export default function Home() {
     difficulty: "Lvl 1: Fundamenty",
     short_description: "",
     description: "",
-    videoUrl: "",
+    sources: [""] as string[],
     prerequisite_ids: [] as string[],
   });
 
   const fetchData = async () => {
     setLoading(true);
-    // Pobierz ćwiczenia
     const { data: exData } = await supabase
       .from("exercises")
-      .select("id, title, category, subcategory, difficulty, short_description, description, video_url, prerequisite_ids, muscles, joints")
+      .select("id, title, category, subcategory, difficulty, short_description, description, video_url, sources, prerequisite_ids, muscles, joints")
       .order("created_at", { ascending: false });
 
     if (exData) setExercises(exData);
 
-    // Pobierz treningi
     const { data: woData } = await supabase
       .from("workouts")
       .select("*")
@@ -213,6 +210,7 @@ export default function Home() {
   const handleOpenEdit = (e: React.MouseEvent, ex: Exercise) => {
     e.stopPropagation();
     setEditingExerciseId(ex.id);
+    const existingSources = ex.sources && ex.sources.length > 0 ? ex.sources : (ex.video_url ? [ex.video_url] : [""]);
     setFormData({
       title: ex.title,
       category: ex.category,
@@ -220,7 +218,7 @@ export default function Home() {
       difficulty: ex.difficulty,
       short_description: ex.short_description || "",
       description: ex.description || "",
-      videoUrl: ex.video_url || "",
+      sources: existingSources,
       prerequisite_ids: ex.prerequisite_ids || [],
     });
     setIsModalOpen(true);
@@ -233,12 +231,13 @@ export default function Home() {
     const { error } = await supabase.from("exercises").delete().eq("id", id);
     if (!error) {
       setExercises((prev) => prev.filter((item) => item.id !== id));
+    } else {
+      alert("Błąd usuwania: " + error.message);
     }
   };
 
-  const formatVideoOrAudioUrl = (url: string) => {
+  const formatUrl = (url: string) => {
     if (!url) return "";
-    // YouTube
     if (url.includes("youtube.com/watch?v=")) {
       const videoId = url.split("v=")[1]?.split("&")[0];
       return `https://www.youtube.com/embed/${videoId}`;
@@ -247,7 +246,14 @@ export default function Home() {
       const videoId = url.split("youtu.be/")[1]?.split("?")[0];
       return `https://www.youtube.com/embed/${videoId}`;
     }
-    // Spotify Embed Converter
+    if (url.includes("youtube.com/shorts/")) {
+      const videoId = url.split("shorts/")[1]?.split("?")[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    if (url.includes("drive.google.com/file/d/")) {
+      const fileId = url.split("/d/")[1]?.split("/")[0];
+      return `https://drive.google.com/file/d/${fileId}/preview`;
+    }
     if (url.includes("open.spotify.com/playlist/")) {
       const playlistId = url.split("playlist/")[1]?.split("?")[0];
       return `https://open.spotify.com/embed/playlist/${playlistId}?utm_source=generator&theme=0`;
@@ -255,9 +261,37 @@ export default function Home() {
     return url;
   };
 
+  // Obsługa wielu źródeł w formularzu
+  const handleSourceChange = (index: number, value: string) => {
+    setFormData((prev) => {
+      const newSources = [...prev.sources];
+      newSources[index] = value;
+      return { ...prev, sources: newSources };
+    });
+  };
+
+  const addSourceField = () => {
+    setFormData((prev) => ({
+      ...prev,
+      sources: [...prev.sources, ""],
+    }));
+  };
+
+  const removeSourceField = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      sources: prev.sources.filter((_, i) => i !== index),
+    }));
+  };
+
   const handleSaveExercise = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title) return;
+
+    const formattedSources = formData.sources
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .map(formatUrl);
 
     const payload = {
       title: formData.title,
@@ -266,7 +300,8 @@ export default function Home() {
       difficulty: formData.difficulty,
       short_description: formData.short_description,
       description: formData.description || formData.short_description,
-      video_url: formatVideoOrAudioUrl(formData.videoUrl),
+      sources: formattedSources,
+      video_url: formattedSources[0] || "",
       prerequisite_ids: formData.prerequisite_ids,
     };
 
@@ -283,51 +318,18 @@ export default function Home() {
         );
         setIsModalOpen(false);
         setEditingExerciseId(null);
+      } else if (error) {
+        alert("Błąd zapisu: " + error.message);
       }
     } else {
       const { data, error } = await supabase.from("exercises").insert([payload]).select();
       if (!error && data) {
         setExercises((prev) => [data[0], ...prev]);
         setIsModalOpen(false);
+      } else if (error) {
+        alert("Błąd zapisu: " + error.message);
       }
     }
-  };
-
-  // Zapisywanie nowego treningu
-  const handleSaveWorkout = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!workoutForm.title) return;
-
-    const { data, error } = await supabase
-      .from("workouts")
-      .insert([workoutForm])
-      .select();
-
-    if (!error && data) {
-      setWorkouts((prev) => [data[0], ...prev]);
-      setIsWorkoutModalOpen(false);
-      setWorkoutForm({
-        title: "",
-        description: "",
-        level: "Średniozaawansowany",
-        exercise_ids: [],
-      });
-      setActiveCategory("Własne treningi");
-    } else if (error) {
-      alert("Błąd: " + error.message);
-    }
-  };
-
-  const toggleWorkoutExercise = (id: string) => {
-    setWorkoutForm((prev) => {
-      const exists = prev.exercise_ids.includes(id);
-      return {
-        ...prev,
-        exercise_ids: exists
-          ? prev.exercise_ids.filter((x) => x !== id)
-          : [...prev.exercise_ids, id],
-      };
-    });
   };
 
   const filteredList = useMemo(() => {
@@ -379,9 +381,7 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Pasek akcji w nagłówku */}
         <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
-          {/* Przycisk do Osi Czasu / Feedu Progresu */}
           <Link
             href="/timeline"
             className="flex items-center gap-1.5 bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all hover:border-emerald-500/60 active:scale-95 cursor-pointer"
@@ -390,7 +390,6 @@ export default function Home() {
             <span>Timeline</span>
           </Link>
 
-          {/* Kreator Treningu */}
           <button
             onClick={() => setIsWorkoutModalOpen(true)}
             className="flex items-center gap-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all hover:text-white active:scale-95 cursor-pointer"
@@ -399,7 +398,6 @@ export default function Home() {
             <span>Stwórz Trening</span>
           </button>
 
-          {/* Przełącznik Trenera */}
           <button
             onClick={handleToggleCoach}
             className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
@@ -411,7 +409,6 @@ export default function Home() {
             {isCoach ? "🔒 Trener" : "🔑 Trener"}
           </button>
 
-          {/* Przycisk dodawania: ZAWSZE WIDOCZNY DLA KAŻDEGO */}
           <button
             onClick={() => {
               setEditingExerciseId(null);
@@ -422,7 +419,7 @@ export default function Home() {
                 difficulty: activeCategory === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
                 short_description: "",
                 description: "",
-                videoUrl: "",
+                sources: [""],
                 prerequisite_ids: [],
               });
               setIsModalOpen(true);
@@ -435,7 +432,6 @@ export default function Home() {
       </header>
 
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* Pasek kategorii głównych (w tym Własne treningi i Muzyka) */}
         <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none select-none border-b border-neutral-900 pb-4">
           {MAIN_CATEGORIES.map((cat) => (
             <button
@@ -452,7 +448,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Wyszukiwarka */}
         <input
           type="text"
           placeholder={`Szukaj w ${activeCategory}...`}
@@ -461,7 +456,6 @@ export default function Home() {
           className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
         />
 
-        {/* Podkategorie */}
         {activeCategory !== "Własne treningi" && (
           <div className="space-y-3 select-none">
             <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
@@ -483,7 +477,6 @@ export default function Home() {
               ))}
             </div>
 
-            {/* Filtr poziomów dla Trickingu */}
             {activeCategory === "Tricking" && (
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
                 <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mr-1">
@@ -507,281 +500,126 @@ export default function Home() {
           </div>
         )}
 
-        {/* WIDOK DLA ZAKŁADKI: WŁASNE TRENINGI */}
-        {activeCategory === "Własne treningi" ? (
-          workouts.length === 0 ? (
-            <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
-              Brak skomponowanych treningów. Kliknij u góry <strong>„Stwórz Trening”</strong>, aby połączyć ćwiczenia w gotową jednostkę!
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-              {workouts.map((wo) => {
-                const includedExercises = exercises.filter((ex) =>
-                  wo.exercise_ids?.includes(ex.id)
-                );
-                return (
-                  <div
-                    key={wo.id}
-                    className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 space-y-4 hover:border-emerald-500/40 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
-                        {wo.level}
-                      </span>
-                      <span className="text-xs text-neutral-500 font-mono">
-                        {wo.exercise_ids?.length || 0} ćwiczeń
-                      </span>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xl font-bold text-white mb-1">{wo.title}</h3>
-                      <p className="text-xs text-neutral-400 leading-relaxed">{wo.description}</p>
-                    </div>
-
-                    {/* Lista ćwiczeń w treningu */}
-                    <div className="space-y-2 border-t border-neutral-800/80 pt-3">
-                      <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-                        Kolejność w jednostce:
-                      </p>
-                      <div className="space-y-1.5">
-                        {includedExercises.map((ex, i) => (
-                          <div
-                            key={ex.id}
-                            className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-xl text-xs border border-neutral-800/80"
-                          >
-                            <span className="text-neutral-300 font-medium">
-                              {i + 1}. {ex.title}
-                            </span>
-                            <Link
-                              href={`/exercise/${ex.id}`}
-                              className="text-emerald-400 hover:text-emerald-300 text-[11px]"
-                            >
-                              Otwórz →
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
+        {/* Siatka kart */}
+        {loading ? (
+          <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
+            Ładowanie bazy danych...
+          </div>
+        ) : filteredList.length === 0 ? (
+          <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
+            Brak elementów w tej kategorii.
+          </div>
         ) : (
-          /* STANDARDOWA SIATKA ĆWICZEŃ I MUZYKI */
-          loading ? (
-            <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
-              Ładowanie bazy danych...
-            </div>
-          ) : filteredList.length === 0 ? (
-            <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
-              Brak elementów w tej kategorii.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2 items-start">
-              {filteredList.map((item) => {
-                const isExpanded = !!expandedCardIds[item.id];
-                const isSpotify = item.video_url?.includes("spotify.com");
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2 items-start">
+            {filteredList.map((item) => {
+              const isExpanded = !!expandedCardIds[item.id];
+              const primaryMedia = (item.sources && item.sources[0]) || item.video_url || "";
+              const isSpotify = primaryMedia.includes("spotify.com");
 
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => toggleExpand(item.id)}
-                    className={`border rounded-2xl p-5 transition-all duration-300 select-none cursor-pointer flex flex-col justify-between ${
-                      isExpanded
-                        ? "bg-neutral-900/90 border-emerald-500/60 shadow-xl shadow-emerald-950/40"
-                        : "bg-neutral-900/60 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/80"
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[180px]">
-                          {item.subcategory || item.category}
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => toggleExpand(item.id)}
+                  className={`border rounded-2xl p-5 transition-all duration-300 select-none cursor-pointer flex flex-col justify-between ${
+                    isExpanded
+                      ? "bg-neutral-900/90 border-emerald-500/60 shadow-xl shadow-emerald-950/40"
+                      : "bg-neutral-900/60 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/80"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[180px]">
+                        {item.subcategory || item.category}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-neutral-400 truncate">
+                          {item.difficulty}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-neutral-400 truncate">
-                            {item.difficulty}
-                          </span>
-                          <span
-                            className={`text-xs text-neutral-500 transition-transform duration-300 ${
-                              isExpanded ? "rotate-180 text-emerald-400" : ""
-                            }`}
-                          >
-                            ▼
-                          </span>
-                        </div>
+                        <span
+                          className={`text-xs text-neutral-500 transition-transform duration-300 ${
+                            isExpanded ? "rotate-180 text-emerald-400" : ""
+                          }`}
+                        >
+                          ▼
+                        </span>
                       </div>
-
-                      <h3
-                        className={`text-lg font-bold transition-colors ${
-                          isExpanded ? "text-emerald-300" : "text-white"
-                        }`}
-                      >
-                        {item.title}
-                      </h3>
                     </div>
 
-                    {/* Rozwijana sekcja */}
-                    <div
-                      className={`grid transition-all duration-300 ease-in-out ${
-                        isExpanded
-                          ? "grid-rows-[1fr] opacity-100 mt-3 pt-3 border-t border-neutral-800/80"
-                          : "grid-rows-[0fr] opacity-0 mt-0 pt-0 border-transparent"
+                    <h3
+                      className={`text-lg font-bold transition-colors ${
+                        isExpanded ? "text-emerald-300" : "text-white"
                       }`}
                     >
-                      <div className="overflow-hidden space-y-4">
-                        <p className="text-neutral-400 text-xs leading-relaxed">
-                          {item.short_description || "Brak krótkiego opisu."}
-                        </p>
+                      {item.title}
+                    </h3>
+                  </div>
 
-                        {/* Player Spotify w kategorii Muzyka */}
-                        {isSpotify && item.video_url && (
-                          <div className="mt-2 rounded-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                            <iframe
-                              src={item.video_url}
-                              width="100%"
-                              height="152"
-                              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                              loading="lazy"
-                            />
+                  <div
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      isExpanded
+                        ? "grid-rows-[1fr] opacity-100 mt-3 pt-3 border-t border-neutral-800/80"
+                        : "grid-rows-[0fr] opacity-0 mt-0 pt-0 border-transparent"
+                    }`}
+                  >
+                    <div className="overflow-hidden space-y-4">
+                      <p className="text-neutral-400 text-xs leading-relaxed">
+                        {item.short_description || "Brak krótkiego opisu."}
+                      </p>
+
+                      {isSpotify && primaryMedia && (
+                        <div className="mt-2 rounded-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                          <iframe
+                            src={primaryMedia}
+                            width="100%"
+                            height="152"
+                            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1">
+                        {isCoach ? (
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => handleOpenEdit(e, item)}
+                              className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2.5 py-1.5 rounded-lg border border-neutral-700"
+                            >
+                              ✏️ Edytuj
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteExercise(e, item.id, item.title)}
+                              className="text-xs bg-red-950/40 hover:bg-red-900/60 text-red-400 px-2.5 py-1.5 rounded-lg border border-red-900/50"
+                            >
+                              🗑️
+                            </button>
                           </div>
+                        ) : (
+                          <div />
                         )}
 
-                        <div className="flex items-center justify-between pt-1">
-                          {isCoach ? (
-                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={(e) => handleOpenEdit(e, item)}
-                                className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2.5 py-1.5 rounded-lg border border-neutral-700"
-                              >
-                                ✏️ Edytuj
-                              </button>
-                              <button
-                                onClick={(e) => handleDeleteExercise(e, item.id, item.title)}
-                                className="text-xs bg-red-950/40 hover:bg-red-900/60 text-red-400 px-2.5 py-1.5 rounded-lg border border-red-900/50"
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          ) : (
-                            <div />
-                          )}
-
-                          {!isSpotify && (
-                            <div onClick={(e) => e.stopPropagation()}>
-                              <Link
-                                href={`/exercise/${item.id}`}
-                                className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-4 py-2 rounded-xl shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
-                              >
-                                <span>Naucz się</span>
-                                <span>→</span>
-                              </Link>
-                            </div>
-                          )}
-                        </div>
+                        {!isSpotify && (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Link
+                              href={`/exercise/${item.id}`}
+                              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-4 py-2 rounded-xl shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                            >
+                              <span>Naucz się</span>
+                              <span>→</span>
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* Modal tworzenia WŁASNEGO TRENINGU */}
-      {isWorkoutModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-white mb-2">🏋️ Skomponuj Własny Trening</h2>
-            <p className="text-xs text-neutral-400 mb-4">
-              Wybierz ćwiczenia z bazy, które stworzą Twoją jednostkę treningową.
-            </p>
-
-            <form onSubmit={handleSaveWorkout} className="space-y-4">
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Nazwa treningu *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="np. Poniedziałkowy Tricking + Siła Skoku"
-                  value={workoutForm.title}
-                  onChange={(e) => setWorkoutForm({ ...workoutForm, title: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Poziom intensywności</label>
-                <select
-                  value={workoutForm.level}
-                  onChange={(e) => setWorkoutForm({ ...workoutForm, level: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="Wdrożenie / Lekki">Wdrożenie / Lekki</option>
-                  <option value="Średniozaawansowany">Średniozaawansowany</option>
-                  <option value="Wysoka intensywność / PRO">Wysoka intensywność / PRO</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Krótki opis / Plan sesji</label>
-                <textarea
-                  rows={2}
-                  placeholder="np. Rozgrzewka, 4 serie aktywacji, część główna tricking, schłodzenie."
-                  value={workoutForm.description}
-                  onChange={(e) => setWorkoutForm({ ...workoutForm, description: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              {/* Lista ćwiczeń do wyboru w treningu */}
-              <div>
-                <label className="text-xs text-emerald-400 font-medium block mb-2">
-                  Wybierz ćwiczenia ({workoutForm.exercise_ids.length} wybranych):
-                </label>
-                <div className="max-h-52 overflow-y-auto space-y-1.5 p-2 bg-neutral-950 border border-neutral-800 rounded-xl">
-                  {exercises.map((ex) => {
-                    const isSelected = workoutForm.exercise_ids.includes(ex.id);
-                    return (
-                      <div
-                        key={ex.id}
-                        onClick={() => toggleWorkoutExercise(ex.id)}
-                        className={`p-2.5 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                          isSelected
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                            : "hover:bg-neutral-900 text-neutral-300 border border-transparent"
-                        }`}
-                      >
-                        <span className="font-medium">{ex.title}</span>
-                        <span className="text-[10px] text-neutral-500">{ex.category}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsWorkoutModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white"
-                >
-                  Anuluj
-                </button>
-                <button
-                  type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all"
-                >
-                  Zapisz Trening
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal dodawania pozycji */}
+      {/* Modal dodawania i edycji z WIELOMA ŹRÓDŁAMI */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -797,7 +635,7 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="np. Corkscrew, Playlista Bass Boost, Pierś z indyka"
+                  placeholder="np. Corkscrew, Przysiad bułgarski"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -871,7 +709,7 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="Krótki opis lub zajawka..."
+                  placeholder="Krótki opis..."
                   value={formData.short_description}
                   onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -880,15 +718,53 @@ export default function Home() {
 
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">
-                  Link wideo (YouTube) lub link Spotify
+                  Szczegółowy opis i wskazówki metodyczne
                 </label>
-                <input
-                  type="text"
-                  placeholder="https://www.youtube.com/... lub https://open.spotify.com/playlist/..."
-                  value={formData.videoUrl}
-                  onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                <textarea
+                  rows={3}
+                  placeholder="Technika, błędy, spotting..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
+              </div>
+
+              {/* SEKCJA WIELU ŹRÓDEŁ (MULTIPLE SOURCES) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-emerald-400 font-medium">
+                    🔗 Źródła materiałów (YouTube, Google Drive, Spotify, artykuły)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addSourceField}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
+                  >
+                    + Dodaj kolejne źródło
+                  </button>
+                </div>
+
+                {formData.sources.map((sourceUrl, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder={`Link źródła #${idx + 1} (np. https://youtube.com/...)`}
+                      value={sourceUrl}
+                      onChange={(e) => handleSourceChange(idx, e.target.value)}
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                    {formData.sources.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSourceField(idx)}
+                        className="px-2 py-2 text-neutral-500 hover:text-red-400 text-sm font-bold cursor-pointer"
+                        title="Usuń to źródło"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
 
               <div className="flex justify-end gap-3 pt-2">

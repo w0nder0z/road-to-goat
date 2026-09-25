@@ -15,6 +15,7 @@ interface ExerciseDetail {
   joints: string[];
   muscles: string[];
   video_url: string;
+  sources?: string[];
   prerequisite_ids?: string[];
 }
 
@@ -42,26 +43,25 @@ export default function ExerciseDetailPage() {
   const [submissions, setSubmissions] = useState<ProgressSubmission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal dodawania próby wideo
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [form, setForm] = useState({
-    athlete_name: "",
-    video_url: "",
-    notes: "",
-  });
+  const [form, setForm] = useState({ athlete_name: "", video_url: "", notes: "" });
 
   const formatVideoUrl = (url: string) => {
     if (!url) return "";
+    if (url.includes("drive.google.com/file/d/")) {
+      const fileId = url.split("/d/")[1]?.split("/")[0];
+      return `https://drive.google.com/file/d/${fileId}/preview`;
+    }
+    if (url.includes("youtube.com/shorts/")) {
+      const videoId = url.split("shorts/")[1]?.split("?")[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
     if (url.includes("youtube.com/watch?v=")) {
       const videoId = url.split("v=")[1]?.split("&")[0];
       return `https://www.youtube.com/embed/${videoId}`;
     }
     if (url.includes("youtu.be/")) {
       const videoId = url.split("youtu.be/")[1]?.split("?")[0];
-      return `https://www.youtube.com/embed/${videoId}`;
-    }
-    if (url.includes("youtube.com/shorts/")) {
-      const videoId = url.split("shorts/")[1]?.split("?")[0];
       return `https://www.youtube.com/embed/${videoId}`;
     }
     return url;
@@ -71,7 +71,6 @@ export default function ExerciseDetailPage() {
     if (!id) return;
     setLoading(true);
 
-    // 1. Pobierz dane ćwiczenia
     const { data: currentEx, error } = await supabase
       .from("exercises")
       .select("*")
@@ -85,7 +84,6 @@ export default function ExerciseDetailPage() {
 
     setExercise(currentEx);
 
-    // 2. Pobierz Wymagania wstępne (Prerequisites)
     if (currentEx.prerequisite_ids && currentEx.prerequisite_ids.length > 0) {
       const { data: prereqData } = await supabase
         .from("exercises")
@@ -97,26 +95,20 @@ export default function ExerciseDetailPage() {
       setPrerequisites([]);
     }
 
-    // 3. Pobierz Odblokowywane tricki
     const { data: unlockedData } = await supabase
       .from("exercises")
       .select("id, title, difficulty")
       .contains("prerequisite_ids", [id]);
 
-    if (unlockedData) {
-      setUnlockedTricks(unlockedData);
-    }
+    if (unlockedData) setUnlockedTricks(unlockedData);
 
-    // 4. Pobierz próby wideo powiązane ściśle z tym trickiem
     const { data: subsData } = await supabase
       .from("progress_submissions")
       .select("id, athlete_name, video_url, notes, created_at")
       .eq("exercise_id", id)
       .order("created_at", { ascending: false });
 
-    if (subsData) {
-      setSubmissions(subsData);
-    }
+    if (subsData) setSubmissions(subsData);
 
     setLoading(false);
   };
@@ -163,20 +155,21 @@ export default function ExerciseDetailPage() {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 p-8 flex flex-col items-center justify-center">
         <p className="text-neutral-400 mb-4">Nie znaleziono takiego ćwiczenia.</p>
-        <Link
-          href="/"
-          className="text-emerald-400 hover:text-emerald-300 text-sm font-semibold underline"
-        >
+        <Link href="/" className="text-emerald-400 hover:text-emerald-300 text-sm font-semibold underline">
           ← Wróć do bazy
         </Link>
       </div>
     );
   }
 
+  // Lista wszystkich źródeł (nowa tablica lub stary pojedynczy video_url)
+  const allSources = exercise.sources && exercise.sources.length > 0 
+    ? exercise.sources 
+    : (exercise.video_url ? [exercise.video_url] : []);
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Nawigacja */}
         <div className="flex items-center justify-between select-none">
           <Link
             href="/"
@@ -186,15 +179,11 @@ export default function ExerciseDetailPage() {
             <span>Wróć do bazy ROAD TO GOAT</span>
           </Link>
 
-          <Link
-            href="/timeline"
-            className="text-xs text-neutral-400 hover:text-emerald-400 transition-colors"
-          >
+          <Link href="/timeline" className="text-xs text-neutral-400 hover:text-emerald-400 transition-colors">
             🎬 Otwórz globalny Timeline →
           </Link>
         </div>
 
-        {/* Główna karta ćwiczenia */}
         <div className="bg-neutral-900/60 border border-neutral-800 rounded-3xl p-6 md:p-8">
           <div className="flex flex-wrap items-center gap-3 mb-4 select-none">
             <span className="text-xs font-semibold px-3 py-1 rounded-lg bg-neutral-800 text-emerald-400 border border-neutral-700">
@@ -215,32 +204,44 @@ export default function ExerciseDetailPage() {
             </p>
           )}
 
-          {/* Odtwarzacz wideo źródłowego / tutoriala */}
-          {exercise.video_url && (
-            <div className="mb-6">
-              {exercise.video_url.includes("youtube.com/embed") ? (
-                <div className="rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800 shadow-2xl">
-                  <iframe
-                    src={exercise.video_url}
-                    title={exercise.title}
-                    className="w-full h-full"
-                    allowFullScreen
-                  />
-                </div>
-              ) : (
-                <a
-                  href={exercise.video_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 p-4 bg-neutral-950/80 border border-neutral-800 hover:border-emerald-500/50 rounded-2xl text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
-                >
-                  <span>🔗 Otwórz materiał źródłowy w nowej karcie</span>
-                </a>
-              )}
+          {/* PREZENTACJA WSZYSTKICH ŹRÓDEŁ */}
+          {allSources.length > 0 && (
+            <div className="space-y-4 mb-6">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                Materiały źródłowe & Tutoriale ({allSources.length}):
+              </h2>
+              <div className="space-y-4">
+                {allSources.map((sourceUrl, idx) => {
+                  const isEmbed = sourceUrl.includes("youtube.com/embed") || sourceUrl.includes("drive.google.com");
+                  return (
+                    <div key={idx} className="space-y-2">
+                      {isEmbed ? (
+                        <div className="rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800 shadow-2xl">
+                          <iframe
+                            src={sourceUrl}
+                            title={`${exercise.title} - źródło ${idx + 1}`}
+                            className="w-full h-full"
+                            allowFullScreen
+                          />
+                        </div>
+                      ) : (
+                        <a
+                          href={sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between p-3.5 bg-neutral-950 border border-neutral-800 hover:border-emerald-500/50 rounded-xl text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                        >
+                          <span>🔗 Otwórz źródło #{idx + 1} w nowej karcie</span>
+                          <span className="text-neutral-500 truncate max-w-xs">{sourceUrl}</span>
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          {/* Wskazówki trenerskie */}
           {exercise.description && (
             <div className="space-y-2 mb-6">
               <h2 className="text-sm font-semibold text-neutral-200">
@@ -252,7 +253,6 @@ export default function ExerciseDetailPage() {
             </div>
           )}
 
-          {/* Tagi anatomiczne */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-neutral-800/60">
             <div>
               <p className="text-xs text-neutral-400 mb-2 font-medium">Kluczowe stawy:</p>
@@ -292,7 +292,7 @@ export default function ExerciseDetailPage() {
           </div>
         </div>
 
-        {/* DRZEWKO PROGRESJI */}
+        {/* Drzewko progresji */}
         <div className="bg-neutral-900/50 border border-neutral-800/90 rounded-3xl p-6 md:p-8 space-y-6">
           <div>
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -346,7 +346,7 @@ export default function ExerciseDetailPage() {
 
               {unlockedTricks.length === 0 ? (
                 <p className="text-xs text-neutral-500 italic py-2">
-                  Ten element jest obecnie na szczycie gałęzi progresji lub kolejne tricki nie zostały jeszcze powiązane.
+                  Ten element jest obecnie na szczycie gałęzi progresji.
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -370,7 +370,7 @@ export default function ExerciseDetailPage() {
           </div>
         </div>
 
-        {/* FEED PRÓB ZAWODNIKÓW DLA TEGO TRICKU */}
+        {/* Sekcja postępów zawodników */}
         <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-3xl p-6 md:p-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -391,7 +391,7 @@ export default function ExerciseDetailPage() {
 
           {submissions.length === 0 ? (
             <div className="p-8 text-center border border-dashed border-neutral-800 rounded-2xl text-neutral-500 text-sm">
-              Brak dodanych nagrań dla tego tricku. Bądź pierwszym, który wrzuci swoją próbę!
+              Brak dodanych nagrań dla tego tricku.
             </div>
           ) : (
             <div className="space-y-6">
@@ -418,7 +418,6 @@ export default function ExerciseDetailPage() {
                     </span>
                   </div>
 
-                  {/* Odtwarzacz */}
                   {sub.video_url && (
                     <div className="rounded-xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800">
                       <iframe
@@ -442,24 +441,18 @@ export default function ExerciseDetailPage() {
         </div>
       </div>
 
-      {/* Modal dodawania wideo pod tym trickiem */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-1">
               Wrzuć próbę: {exercise.title}
             </h2>
-            <p className="text-xs text-neutral-400 mb-4">
-              Twoje nagranie pojawi się tutaj oraz w ogólnym feedzie Timeline.
-            </p>
-
             <form onSubmit={handleAddSubmission} className="space-y-4">
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">Twoje imię / Nick *</label>
                 <input
                   type="text"
                   required
-                  placeholder="np. Piotrek, Alicja"
                   value={form.athlete_name}
                   onChange={(e) => setForm({ ...form, athlete_name: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -467,11 +460,10 @@ export default function ExerciseDetailPage() {
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Link do wideo (YouTube / Shorts) *</label>
+                <label className="text-xs text-neutral-400 block mb-1">Link do wideo *</label>
                 <input
                   type="text"
                   required
-                  placeholder="https://www.youtube.com/watch?v=... lub Shorts"
                   value={form.video_url}
                   onChange={(e) => setForm({ ...form, video_url: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -479,10 +471,9 @@ export default function ExerciseDetailPage() {
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Komentarz / Wnioski z próby</label>
+                <label className="text-xs text-neutral-400 block mb-1">Komentarz</label>
                 <textarea
                   rows={2}
-                  placeholder="Co poprawić, jak amortyzacja, czy trick wszedł czysto..."
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -493,13 +484,13 @@ export default function ExerciseDetailPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white"
                 >
                   Anuluj
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all"
                 >
                   Zapisz próbę
                 </button>
