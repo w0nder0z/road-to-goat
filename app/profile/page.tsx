@@ -17,7 +17,7 @@ interface Workout {
 interface ProgressItem {
   id: string;
   exercise_title: string;
-  video_url: string;
+  video_url?: string;
   notes: string;
   created_at: string;
 }
@@ -31,6 +31,13 @@ interface TimelineComment {
   created_at: string;
 }
 
+interface AthleteProfile {
+  id: string;
+  username: string;
+  role: "athlete" | "coach";
+  created_at: string;
+}
+
 const COACH_PIN = "1234";
 
 export default function ProfilePage() {
@@ -39,6 +46,7 @@ export default function ProfilePage() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [submissions, setSubmissions] = useState<ProgressItem[]>([]);
   const [comments, setComments] = useState<TimelineComment[]>([]);
+  const [allAthletes, setAllAthletes] = useState<AthleteProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,13 +59,13 @@ export default function ProfilePage() {
     try {
       const parsed = JSON.parse(savedUserStr);
       setCurrentUser(parsed);
-      loadUserData(parsed.username);
+      loadUserData(parsed.username, parsed.role);
     } catch {
       setLoading(false);
     }
   }, []);
 
-  const loadUserData = async (username: string) => {
+  const loadUserData = async (username: string, role: "athlete" | "coach") => {
     setLoading(true);
 
     // Pobierz własne treningi
@@ -79,7 +87,6 @@ export default function ProfilePage() {
     if (subsData) {
       setSubmissions(subsData);
 
-      // Pobierz feedback do tych nagrań
       const subIds = subsData.map((s) => s.id);
       if (subIds.length > 0) {
         const { data: commsData } = await supabase
@@ -92,25 +99,67 @@ export default function ProfilePage() {
       }
     }
 
+    // Jeśli użytkownik to Trener, pobierz listę wszystkich kont do zarządzania
+    if (role === "coach") {
+      const { data: athletesData } = await supabase
+        .from("athlete_profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (athletesData) setAllAthletes(athletesData);
+    }
+
     setLoading(false);
   };
 
-  const handleToggleCoach = () => {
+  const handleToggleCoach = async () => {
     if (!currentUser) return;
     if (currentUser.role === "coach") {
       const downgraded = { username: currentUser.username, role: "athlete" as const };
       setCurrentUser(downgraded);
       localStorage.setItem("goat_athlete_profile", JSON.stringify(downgraded));
+      setAllAthletes([]);
     } else {
       const pin = prompt("Podaj PIN Trenera / Admina:");
       if (pin === COACH_PIN) {
         const upgraded = { username: currentUser.username, role: "coach" as const };
         setCurrentUser(upgraded);
         localStorage.setItem("goat_athlete_profile", JSON.stringify(upgraded));
+        loadUserData(currentUser.username, "coach");
       } else if (pin !== null) {
         alert("Nieprawidłowy PIN.");
       }
     }
+  };
+
+  const handleDeleteAthlete = async (athlete: AthleteProfile) => {
+    if (athlete.username === currentUser?.username) {
+      alert("Nie możesz usunąć swojego własnego konta z tego poziomu.");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Czy na pewno chcesz bezpowrotnie usunąć konto zawodnika "${athlete.username}"?\nUsunięte zostaną również jego treningi i wpisy na Timeline.`
+    );
+    if (!confirmed) return;
+
+    // 1. Usunięcie profilu z bazy
+    const { error: profileErr } = await supabase
+      .from("athlete_profiles")
+      .delete()
+      .eq("id", athlete.id);
+
+    if (profileErr) {
+      alert("Błąd podczas usuwania konta: " + profileErr.message);
+      return;
+    }
+
+    // 2. Kaskadowe czyszczenie powiązanych treningów i zgłoszeń
+    await supabase.from("workouts").delete().eq("author_username", athlete.username);
+    await supabase.from("progress_submissions").delete().eq("athlete_name", athlete.username);
+
+    setAllAthletes((prev) => prev.filter((a) => a.id !== athlete.id));
+    alert(`Konto zawodnika "${athlete.username}" zostało pomyślnie usunięte.`);
   };
 
   const handleLogout = () => {
@@ -196,7 +245,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Akcje profilu */}
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={handleToggleCoach}
@@ -213,7 +261,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Mini Liczniki / Statystyki */}
+        {/* Mini Statystyki */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-2xl p-5">
             <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider block mb-1">
@@ -237,16 +285,76 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Sekcja 1: Moje Plany Treningowe */}
+        {/* PANEL ADMINA: ZARZĄDZANIE KONTAMI ZAWODNIKÓW (TYLKO DLA TRENERA) */}
+        {currentUser.role === "coach" && (
+          <div className="bg-neutral-900/70 border border-red-900/40 rounded-3xl p-6 md:p-8 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <span>👥</span> Panel Trenera: Zarządzanie Zawodnikami
+                </h2>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Możesz usuwać nieaktywne lub testowe konta. Usunięcie profilu wyczyści także jego wpisy i treningi.
+                </p>
+              </div>
+              <span className="text-xs font-mono font-bold bg-neutral-950 border border-neutral-800 text-neutral-300 px-3 py-1 rounded-xl">
+                Konta: {allAthletes.length}
+              </span>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              {allAthletes.map((athlete) => {
+                const isSelf = athlete.username === currentUser.username;
+                return (
+                  <div
+                    key={athlete.id}
+                    className="flex items-center justify-between p-3.5 bg-neutral-950/80 border border-neutral-800/80 rounded-2xl text-xs transition-colors hover:border-neutral-700"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center font-bold text-neutral-200">
+                        {athlete.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{athlete.username}</span>
+                          {isSelf && (
+                            <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-md font-semibold">
+                              Ty
+                            </span>
+                          )}
+                          <span className="text-[10px] text-neutral-500 uppercase font-mono">
+                            {athlete.role === "coach" ? "Trener" : "Zawodnik"}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-neutral-500">
+                          Dołączył(a): {new Date(athlete.created_at).toLocaleDateString("pl-PL")}
+                        </span>
+                      </div>
+                    </div>
+
+                    {!isSelf && (
+                      <button
+                        onClick={() => handleDeleteAthlete(athlete)}
+                        className="bg-red-950/40 hover:bg-red-900/70 border border-red-900/60 text-red-400 hover:text-red-200 px-3 py-1.5 rounded-xl font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>🗑️</span>
+                        <span>Usuń konto</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Sekcja: Moje Plany Treningowe */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <span>📋</span> Moje Skomponowane Treningi ({workouts.length})
             </h2>
-            <Link
-              href="/"
-              className="text-xs text-emerald-400 hover:underline"
-            >
+            <Link href="/" className="text-xs text-emerald-400 hover:underline">
               + Nowy trening na stronie głównej
             </Link>
           </div>
@@ -288,7 +396,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Sekcja 2: Moje Nagrania & Wskazówki od Trenera */}
+        {/* Sekcja: Moje Nagrania & Wskazówki */}
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <span>📹</span> Moje Nagrania i Wskazówki Trenerskie ({submissions.length})
@@ -313,15 +421,10 @@ export default function ProfilePage() {
                         🎯 {sub.exercise_title}
                       </span>
                       <span className="text-xs text-neutral-500">
-                        {new Date(sub.created_at).toLocaleDateString("pl-PL", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        })}
+                        {new Date(sub.created_at).toLocaleDateString("pl-PL")}
                       </span>
                     </div>
 
-                    {/* Wideo */}
                     {sub.video_url && (
                       <div className="rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800">
                         <iframe
@@ -339,7 +442,6 @@ export default function ProfilePage() {
                       </p>
                     )}
 
-                    {/* Feedback pod nagraniem */}
                     {subComments.length > 0 && (
                       <div className="border-t border-neutral-800/80 pt-3 space-y-2">
                         <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">

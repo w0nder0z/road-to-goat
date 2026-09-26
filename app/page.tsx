@@ -114,6 +114,34 @@ const STANDARD_DIFFICULTIES = [
 const TEAM_PASSWORD = "Kawashi2026";
 const COACH_PIN = "1234";
 
+const TUTORIAL_STEPS = [
+  {
+    title: "Witaj w ROAD TO GOAT! 🥋",
+    desc: "Twoja baza przygotowania motorycznego, techniki trickingowej i form muzycznych. Przeprowadzimy Cię krótko po najważniejszych funkcjach.",
+    icon: "🚀",
+  },
+  {
+    title: "Baza Ćwiczeń & Skill Tree 📚",
+    desc: "W rozwijanym menu 'Baza Ćwiczeń' znajdziesz Tricking, Siłę, Plyometrię i Rozciąganie. Kliknięcie w kafelek pozwala zgłębić metodykę i zobaczyć co dany trick odblokowuje w drzewku.",
+    icon: "🌳",
+  },
+  {
+    title: "Własne Treningi & Tryb Sali 🏋️",
+    desc: "Twórz spersonalizowane jednostki według metodyki (Rozgrzewka → Wzmocnienie → Trick → Rozciąganie). Na sali kliknij 'Rozpocznij Trening', aby włączyć stoper, timer przerw i checklistę.",
+    icon: "⏱️",
+  },
+  {
+    title: "Udostępnianie i Import Kodem 🔗",
+    desc: "Podoba Ci się trening kolegi? Każdy plan ma przycisk 'Udostępnij', generujący kod. Wystarczy kliknąć 'Importuj kodem', by zapisać go na swoim profilu.",
+    icon: "📥",
+  },
+  {
+    title: "Timeline & Feedback Trenera 🎬",
+    desc: "W prawym górnym rogu wejdziesz w Timeline. Wrzucaj nagrania prób z sali lub raporty z ukończonych sesji, by Trener mógł zostawiać Ci bezpośrednie korekty techniczne.",
+    icon: "🎯",
+  },
+];
+
 function calculateCompetitionPhase(dateStr: string): string {
   if (!dateStr) return "Planowanie";
   const now = new Date();
@@ -136,13 +164,15 @@ export default function Home() {
   const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Dropdowny nawigacyjne
   const [isExerciseDropdownOpen, setIsExerciseDropdownOpen] = useState(false);
   const [isWorkoutDropdownOpen, setIsWorkoutDropdownOpen] = useState(false);
   const exerciseDropdownRef = useRef<HTMLDivElement>(null);
   const workoutDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Dynamiczna lista zdjęć w tle (obsługuje automatycznie hero7.jpg, hero8.jpg...)
+  // Samouczek (Onboarding Tour)
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+
   const [heroImages, setHeroImages] = useState<string[]>([
     "/hero/hero1.jpg",
     "/hero/hero2.jpg",
@@ -171,11 +201,9 @@ export default function Home() {
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
 
-  // Import treningu
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importCode, setImportCode] = useState("");
 
-  // Kreator treningu
   const [workoutForm, setWorkoutForm] = useState({
     title: "",
     description: "",
@@ -186,7 +214,6 @@ export default function Home() {
     cooldown_ids: [] as string[],
   });
 
-  // Tryb Sali
   const [activeSessionWorkout, setActiveSessionWorkout] = useState<Workout | null>(null);
   const [sessionCompletedIds, setSessionCompletedIds] = useState<string[]>([]);
   const [sessionElapsedTime, setSessionElapsedTime] = useState(0);
@@ -205,7 +232,6 @@ export default function Home() {
     prerequisite_ids: [] as string[],
   });
 
-  // Zamykanie dropdownów przy kliknięciu poza nimi
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (exerciseDropdownRef.current && !exerciseDropdownRef.current.contains(event.target as Node)) {
@@ -219,7 +245,6 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Automatyczne skanowanie kolejnych zdjęć (od hero1 do hero20)
   useEffect(() => {
     async function detectAvailableImages() {
       const detected: string[] = [];
@@ -243,7 +268,6 @@ export default function Home() {
     detectAvailableImages();
   }, []);
 
-  // Rotacja zdjęć w tle co 20 sekund
   useEffect(() => {
     if (heroImages.length === 0) return;
     const timer = setInterval(() => {
@@ -305,13 +329,37 @@ export default function Home() {
         const parsed = JSON.parse(savedUserStr);
         setCurrentUser(parsed);
         checkTimelineUnread(true);
+
+        // Sprawdź czy tutorial był już oglądany
+        const seenTutorial = localStorage.getItem("goat_tutorial_seen");
+        if (!seenTutorial) {
+          setIsTutorialOpen(true);
+        }
       } catch {
         setCurrentUser(null);
       }
     }
   }, []);
 
-  // Obsługa stopera sesji
+  const closeTutorial = () => {
+    setIsTutorialOpen(false);
+    localStorage.setItem("goat_tutorial_seen", "true");
+  };
+
+  const nextTutorialStep = () => {
+    if (tutorialStep < TUTORIAL_STEPS.length - 1) {
+      setTutorialStep((prev) => prev + 1);
+    } else {
+      closeTutorial();
+    }
+  };
+
+  const prevTutorialStep = () => {
+    if (tutorialStep > 0) {
+      setTutorialStep((prev) => prev - 1);
+    }
+  };
+
   useEffect(() => {
     if (activeSessionWorkout) {
       sessionTimerRef.current = setInterval(() => {
@@ -328,7 +376,6 @@ export default function Home() {
     };
   }, [activeSessionWorkout]);
 
-  // Obsługa timera przerw
   useEffect(() => {
     if (restTimerSeconds !== null && restTimerSeconds > 0) {
       restTimerRef.current = setInterval(() => {
@@ -492,6 +539,11 @@ export default function Home() {
       setAuthUsername("");
       setAuthPassword("");
       checkTimelineUnread(true);
+
+      // Nowy użytkownik - uruchom samouczek
+      localStorage.removeItem("goat_tutorial_seen");
+      setTutorialStep(0);
+      setIsTutorialOpen(true);
     } else {
       const { data, error } = await supabase
         .from("athlete_profiles")
@@ -723,6 +775,70 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
+      {/* DYMKI SAMOUCZKA / ONBOARDING TOUR */}
+      {isTutorialOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95 duration-200">
+            {/* Header dymka */}
+            <div className="flex items-center justify-between">
+              <span className="text-3xl">{TUTORIAL_STEPS[tutorialStep].icon}</span>
+              <div className="flex items-center gap-1.5">
+                {TUTORIAL_STEPS.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                      i === tutorialStep ? "w-6 bg-emerald-400" : "w-1.5 bg-neutral-700"
+                    }`}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={closeTutorial}
+                className="text-neutral-500 hover:text-neutral-300 text-xs px-2 py-1 rounded-lg transition-colors cursor-pointer"
+              >
+                Pomiń ✕
+              </button>
+            </div>
+
+            {/* Treść kroku */}
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-md">
+                Krok {tutorialStep + 1} z {TUTORIAL_STEPS.length}
+              </span>
+              <h3 className="text-xl font-extrabold text-white">
+                {TUTORIAL_STEPS[tutorialStep].title}
+              </h3>
+              <p className="text-neutral-300 text-xs md:text-sm leading-relaxed">
+                {TUTORIAL_STEPS[tutorialStep].desc}
+              </p>
+            </div>
+
+            {/* Przyciski nawigacji w dymku */}
+            <div className="flex items-center justify-between pt-2 border-t border-neutral-800/80">
+              <button
+                onClick={prevTutorialStep}
+                disabled={tutorialStep === 0}
+                className={`text-xs px-3 py-1.5 rounded-xl font-medium transition-all ${
+                  tutorialStep === 0
+                    ? "opacity-30 cursor-not-allowed text-neutral-500"
+                    : "text-neutral-300 hover:bg-neutral-800"
+                }`}
+              >
+                ‹ Wstecz
+              </button>
+
+              <button
+                onClick={nextTutorialStep}
+                className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>{tutorialStep === TUTORIAL_STEPS.length - 1 ? "Rozpocznij trening!" : "Dalej"}</span>
+                <span>➔</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SEKCJA HERO BANNER */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -821,7 +937,7 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* KAFELEK: PRZYPOMNIENIE AKTUALNEGO CELU NA ZAWODY (BEZ PLUSA ZAPLANUJ) */}
+              {/* KAFELEK: PRZYPOMNIENIE AKTUALNEGO CELU NA ZAWODY */}
               <div className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
                 <div className="border-b border-neutral-800/80 pb-2 mb-2.5">
                   <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -862,7 +978,7 @@ export default function Home() {
           )}
 
           {/* PRZYCISKI AKCJI Z ROZWIJANYM MENU TRENINGÓW */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div className="relative z-40 flex flex-wrap items-center justify-between gap-3 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2.5">
                 <button
@@ -885,36 +1001,39 @@ export default function Home() {
                   + Dodaj pozycję
                 </button>
 
-                {/* ROZWIJANY PRZYCISK: TRENINGI (STWÓRZ / IMPORTUJ) */}
-                <div className="relative" ref={workoutDropdownRef}>
+                {/* ROZWIJANY PRZYCISK: TRENINGI */}
+                <div className="relative inline-block" ref={workoutDropdownRef}>
                   <button
-                    onClick={() => setIsWorkoutDropdownOpen(!isWorkoutDropdownOpen)}
-                    className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                    type="button"
+                    onClick={() => setIsWorkoutDropdownOpen((prev) => !prev)}
+                    className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer flex items-center gap-2"
                   >
                     <span>🏋️ Treningi</span>
-                    <span className="text-[10px] opacity-70">▾</span>
+                    <span className="text-[10px] text-emerald-400 font-bold">▾</span>
                   </button>
 
                   {isWorkoutDropdownOpen && (
-                    <div className="absolute left-0 mt-2 w-52 bg-neutral-900 border border-neutral-800 rounded-2xl p-2 shadow-2xl z-30 space-y-1">
+                    <div className="absolute left-0 bottom-full mb-2 w-56 bg-neutral-900 border border-neutral-700 rounded-2xl p-2 shadow-2xl z-50 space-y-1">
                       <button
+                        type="button"
                         onClick={() => {
                           setIsWorkoutDropdownOpen(false);
                           setIsWorkoutModalOpen(true);
                         }}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2"
+                        className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2.5 cursor-pointer"
                       >
-                        <span>✨</span>
+                        <span className="text-base">✨</span>
                         <span>Stwórz Nowy Trening</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
                           setIsWorkoutDropdownOpen(false);
                           setIsImportModalOpen(true);
                         }}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2"
+                        className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2.5 cursor-pointer border-t border-neutral-800/80 pt-2"
                       >
-                        <span>📥</span>
+                        <span className="text-base">📥</span>
                         <span>Importuj Kodem od Kolegi</span>
                       </button>
                     </div>
@@ -932,7 +1051,6 @@ export default function Home() {
               <div />
             )}
 
-            {/* WSKAŹNIK KARUZELI */}
             <div className="hidden sm:flex items-center gap-1.5 opacity-60">
               {heroImages.map((_, i) => (
                 <div
@@ -1066,111 +1184,121 @@ export default function Home() {
             <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
               Zaloguj się, aby tworzyć, udostępniać i realizować plany treningowe.
             </div>
-          ) : visibleWorkouts.length === 0 ? (
-            <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl space-y-3">
-              <p>Nie masz jeszcze zapisanych treningów.</p>
-              <div className="flex justify-center gap-3">
-                <button
-                  onClick={() => setIsWorkoutModalOpen(true)}
-                  className="bg-emerald-500 text-black font-bold text-xs px-4 py-2 rounded-xl"
-                >
-                  + Stwórz Trening
-                </button>
-                <button
-                  onClick={() => setIsImportModalOpen(true)}
-                  className="bg-neutral-900 text-emerald-400 border border-emerald-500/40 text-xs px-4 py-2 rounded-xl"
-                >
-                  📥 Importuj kod
-                </button>
-              </div>
-            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-              {visibleWorkouts.map((wo) => {
-                const includedExercises = exercises.filter((ex) =>
-                  wo.exercise_ids?.includes(ex.id)
-                );
-                return (
-                  <div
-                    key={wo.id}
-                    className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 space-y-4 hover:border-emerald-500/40 transition-colors"
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-neutral-900/40 border border-neutral-800/80 p-3.5 rounded-2xl">
+                <span className="text-xs text-neutral-400 font-medium">
+                  Twoje jednostki treningowe ({visibleWorkouts.length})
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsWorkoutModalOpen(true)}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all shadow cursor-pointer"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
-                          {wo.level}
-                        </span>
-                        {wo.original_author && (
-                          <span className="text-[10px] text-amber-300 bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 rounded-md">
-                            Od: {wo.original_author}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleCopyShareCode(wo.id, wo.title)}
-                          className="text-xs text-neutral-400 hover:text-emerald-400 px-2 py-0.5 bg-neutral-950 border border-neutral-800 rounded-md cursor-pointer"
-                          title="Kopiuj kod udostępnienia"
-                        >
-                          🔗 Udostępnij
-                        </button>
-                        <button
-                          onClick={() => handleDeleteWorkout(wo.id, wo.title)}
-                          className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5 bg-red-950/40 border border-red-900/50 rounded-md cursor-pointer"
-                          title="Usuń trening"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
+                    + Stwórz trening
+                  </button>
+                  <button
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-500/40 hover:border-emerald-500 text-xs px-3.5 py-1.5 rounded-xl transition-all font-semibold cursor-pointer"
+                  >
+                    📥 Importuj kodem
+                  </button>
+                </div>
+              </div>
 
-                    <div>
-                      <h3 className="text-xl font-bold text-white mb-1">{wo.title}</h3>
-                      <p className="text-xs text-neutral-400 leading-relaxed">{wo.description}</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        onClick={() => setActiveSessionWorkout(wo)}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-500/20 active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
+              {visibleWorkouts.length === 0 ? (
+                <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl space-y-3">
+                  <p>Nie masz jeszcze zapisanych treningów.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  {visibleWorkouts.map((wo) => {
+                    const includedExercises = exercises.filter((ex) =>
+                      wo.exercise_ids?.includes(ex.id)
+                    );
+                    return (
+                      <div
+                        key={wo.id}
+                        className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 space-y-4 hover:border-emerald-500/40 transition-colors"
                       >
-                        <span>▶ Rozpocznij Trening</span>
-                      </button>
-
-                      <button
-                        onClick={() => handlePublishWorkoutToTimeline(wo, "45 min")}
-                        className="bg-neutral-950 hover:bg-neutral-800 border border-neutral-700/80 text-emerald-400 text-xs py-2.5 rounded-xl transition-all font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <span>🏆 Wrzuć na Timeline</span>
-                      </button>
-                    </div>
-
-                    <div className="space-y-2 border-t border-neutral-800/80 pt-3">
-                      <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-                        Ćwiczenia w planie ({includedExercises.length}):
-                      </p>
-                      <div className="space-y-1.5">
-                        {includedExercises.map((ex, i) => (
-                          <div
-                            key={ex.id}
-                            className="flex items-center justify-between p-2 bg-neutral-950 rounded-xl text-xs border border-neutral-800/80"
-                          >
-                            <span className="text-neutral-300 font-medium">
-                              {i + 1}. {ex.title} ({ex.category})
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
+                              {wo.level}
                             </span>
-                            <Link
-                              href={`/exercise/${ex.id}`}
-                              className="text-emerald-400 hover:text-emerald-300 text-[11px]"
-                            >
-                              Metodyka →
-                            </Link>
+                            {wo.original_author && (
+                              <span className="text-[10px] text-amber-300 bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 rounded-md">
+                                Od: {wo.original_author}
+                              </span>
+                            )}
                           </div>
-                        ))}
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleCopyShareCode(wo.id, wo.title)}
+                              className="text-xs text-neutral-400 hover:text-emerald-400 px-2 py-0.5 bg-neutral-950 border border-neutral-800 rounded-md cursor-pointer"
+                              title="Kopiuj kod udostępnienia"
+                            >
+                              🔗 Udostępnij
+                            </button>
+                            <button
+                              onClick={() => handleDeleteWorkout(wo.id, wo.title)}
+                              className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5 bg-red-950/40 border border-red-900/50 rounded-md cursor-pointer"
+                              title="Usuń trening"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <h3 className="text-xl font-bold text-white mb-1">{wo.title}</h3>
+                          <p className="text-xs text-neutral-400 leading-relaxed">{wo.description}</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            onClick={() => setActiveSessionWorkout(wo)}
+                            className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-500/20 active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span>▶ Rozpocznij Trening</span>
+                          </button>
+
+                          <button
+                            onClick={() => handlePublishWorkoutToTimeline(wo, "45 min")}
+                            className="bg-neutral-950 hover:bg-neutral-800 border border-neutral-700/80 text-emerald-400 text-xs py-2.5 rounded-xl transition-all font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span>🏆 Wrzuć na Timeline</span>
+                          </button>
+                        </div>
+
+                        <div className="space-y-2 border-t border-neutral-800/80 pt-3">
+                          <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+                            Ćwiczenia w planie ({includedExercises.length}):
+                          </p>
+                          <div className="space-y-1.5">
+                            {includedExercises.map((ex, i) => (
+                              <div
+                                key={ex.id}
+                                className="flex items-center justify-between p-2 bg-neutral-950 rounded-xl text-xs border border-neutral-800/80"
+                              >
+                                <span className="text-neutral-300 font-medium">
+                                  {i + 1}. {ex.title} ({ex.category})
+                                </span>
+                                <Link
+                                  href={`/exercise/${ex.id}`}
+                                  className="text-emerald-400 hover:text-emerald-300 text-[11px]"
+                                >
+                                  Metodyka →
+                                </Link>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )
         ) : (
