@@ -755,8 +755,21 @@ export default function Home() {
     return workouts.filter((w) => w.author_username === currentUser.username);
   }, [workouts, currentUser]);
 
+  // Pomocnicza waga poziomu trudności dla sortowania
+  const getLevelWeight = (diff: string) => {
+    if (!diff) return 99;
+    const lower = diff.toLowerCase();
+    if (lower.includes("lvl 1") || lower.includes("fundament")) return 1;
+    if (lower.includes("lvl 2") || lower.includes("baza")) return 2;
+    if (lower.includes("lvl 3") || lower.includes("pojedyncze")) return 3;
+    if (lower.includes("lvl 4") || lower.includes("zaawansowan")) return 4;
+    if (lower.includes("lvl 5") || lower.includes("master")) return 5;
+    if (lower.includes("lvl 6") || lower.includes("elite")) return 6;
+    return 10;
+  };
+
   const filteredList = useMemo(() => {
-    return exercises.filter((item) => {
+    const list = exercises.filter((item) => {
       if (item.category !== activeCategory) return false;
 
       const matchesSearch =
@@ -776,6 +789,22 @@ export default function Home() {
       }
 
       return true;
+    });
+
+    // SORTOWANIE PO DRZEWKU PROGRESJI (Topologiczne + Poziomowe)
+    return list.sort((a, b) => {
+      if (b.prerequisite_ids?.includes(a.id)) return -1;
+      if (a.prerequisite_ids?.includes(b.id)) return 1;
+
+      const levelA = getLevelWeight(a.difficulty);
+      const levelB = getLevelWeight(b.difficulty);
+      if (levelA !== levelB) return levelA - levelB;
+
+      const prereqsA = a.prerequisite_ids?.length || 0;
+      const prereqsB = b.prerequisite_ids?.length || 0;
+      if (prereqsA !== prereqsB) return prereqsA - prereqsB;
+
+      return 0;
     });
   }, [exercises, activeCategory, activeSubcategory, activeTrickingLevel, searchTerm]);
 
@@ -1065,7 +1094,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PASEK KATEGORII: TRICKING/BAZA -> MUZYKA -> DIETA (+ WŁASNE TRENINGI GDY ZALOGOWANY) */}
+      {/* PASEK KATEGORII: BAZA -> MUZYKA -> DIETA (+ WŁASNE TRENINGI GDY ZALOGOWANY) */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
         <div className="flex flex-wrap items-center gap-2.5 pb-2 select-none border-b border-neutral-900 pb-3">
           {/* 1. ROZWIJANA BAZA ĆWICZEŃ */}
@@ -1893,7 +1922,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* KOD KLUBU TYLKO PRZY REJESTRACJI */}
               {authMode === "register" && (
                 <div>
                   <label className="text-xs text-emerald-400 font-semibold block mb-1">

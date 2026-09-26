@@ -38,8 +38,6 @@ interface AthleteProfile {
   created_at: string;
 }
 
-const COACH_PIN = "1234";
-
 export default function ProfilePage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{ username: string; role: "athlete" | "coach" } | null>(null);
@@ -50,25 +48,44 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedUserStr = localStorage.getItem("goat_athlete_profile");
-    if (!savedUserStr) {
-      setLoading(false);
-      return;
+    async function verifyAndLoadProfile() {
+      const token = localStorage.getItem("goat_auth_token");
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (res.ok) {
+          const authData = await res.json();
+          setCurrentUser(authData.user);
+          localStorage.setItem("goat_athlete_profile", JSON.stringify(authData.user));
+          await loadUserData(authData.user.username, authData.user.role);
+        } else {
+          localStorage.removeItem("goat_auth_token");
+          localStorage.removeItem("goat_athlete_profile");
+          setCurrentUser(null);
+        }
+      } catch {
+        const fallback = localStorage.getItem("goat_athlete_profile");
+        if (fallback) {
+          const parsed = JSON.parse(fallback);
+          setCurrentUser(parsed);
+          await loadUserData(parsed.username, parsed.role);
+        }
+      } finally {
+        setLoading(false);
+      }
     }
 
-    try {
-      const parsed = JSON.parse(savedUserStr);
-      setCurrentUser(parsed);
-      loadUserData(parsed.username, parsed.role);
-    } catch {
-      setLoading(false);
-    }
+    verifyAndLoadProfile();
   }, []);
 
   const loadUserData = async (username: string, role: "athlete" | "coach") => {
-    setLoading(true);
-
-    // Pobierz własne treningi
     const { data: woData } = await supabase
       .from("workouts")
       .select("*")
@@ -77,7 +94,6 @@ export default function ProfilePage() {
 
     if (woData) setWorkouts(woData);
 
-    // Pobierz własne nagrania z Timeline
     const { data: subsData } = await supabase
       .from("progress_submissions")
       .select("*")
@@ -99,7 +115,6 @@ export default function ProfilePage() {
       }
     }
 
-    // Jeśli użytkownik to Trener, pobierz listę wszystkich kont do zarządzania
     if (role === "coach") {
       const { data: athletesData } = await supabase
         .from("athlete_profiles")
@@ -107,28 +122,6 @@ export default function ProfilePage() {
         .order("created_at", { ascending: false });
 
       if (athletesData) setAllAthletes(athletesData);
-    }
-
-    setLoading(false);
-  };
-
-  const handleToggleCoach = async () => {
-    if (!currentUser) return;
-    if (currentUser.role === "coach") {
-      const downgraded = { username: currentUser.username, role: "athlete" as const };
-      setCurrentUser(downgraded);
-      localStorage.setItem("goat_athlete_profile", JSON.stringify(downgraded));
-      setAllAthletes([]);
-    } else {
-      const pin = prompt("Podaj PIN Trenera / Admina:");
-      if (pin === COACH_PIN) {
-        const upgraded = { username: currentUser.username, role: "coach" as const };
-        setCurrentUser(upgraded);
-        localStorage.setItem("goat_athlete_profile", JSON.stringify(upgraded));
-        loadUserData(currentUser.username, "coach");
-      } else if (pin !== null) {
-        alert("Nieprawidłowy PIN.");
-      }
     }
   };
 
@@ -143,7 +136,6 @@ export default function ProfilePage() {
     );
     if (!confirmed) return;
 
-    // 1. Usunięcie profilu z bazy
     const { error: profileErr } = await supabase
       .from("athlete_profiles")
       .delete()
@@ -154,7 +146,6 @@ export default function ProfilePage() {
       return;
     }
 
-    // 2. Kaskadowe czyszczenie powiązanych treningów i zgłoszeń
     await supabase.from("workouts").delete().eq("author_username", athlete.username);
     await supabase.from("progress_submissions").delete().eq("athlete_name", athlete.username);
 
@@ -162,15 +153,21 @@ export default function ProfilePage() {
     alert(`Konto zawodnika "${athlete.username}" zostało pomyślnie usunięte.`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Ignoruj błąd sieci
+    }
     localStorage.removeItem("goat_athlete_profile");
+    localStorage.removeItem("goat_auth_token");
     router.push("/");
   };
 
   if (loading) {
     return (
       <main className="min-h-screen bg-neutral-950 text-neutral-400 flex items-center justify-center text-sm animate-pulse">
-        Ładowanie profilu zawodnika...
+        Ładowanie profilu...
       </main>
     );
   }
@@ -184,14 +181,14 @@ export default function ProfilePage() {
           </div>
           <h1 className="text-2xl font-black text-white">Profil niedostępny</h1>
           <p className="text-xs text-neutral-400 leading-relaxed">
-            Musisz być zalogowany, aby przeglądać statystyki i archiwum swojego profilu.
+            Zaloguj się na stronie głównej, aby przeglądać statystyki i archiwum swojego profilu.
           </p>
           <div className="pt-2">
             <Link
               href="/"
               className="inline-block bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20"
             >
-              ← Przejdź do logowania
+              ← Przejdź do strony głównej
             </Link>
           </div>
         </div>
@@ -204,7 +201,6 @@ export default function ProfilePage() {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-8">
-        {/* Nawigacja powrotu */}
         <div className="flex items-center justify-between border-b border-neutral-800/80 pb-4 select-none">
           <Link
             href="/"
@@ -247,10 +243,13 @@ export default function ProfilePage() {
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={handleToggleCoach}
+              onClick={() => {
+                localStorage.removeItem("goat_tutorial_seen");
+                router.push("/");
+              }}
               className="bg-neutral-900 hover:bg-neutral-800 border border-neutral-700/80 text-neutral-300 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer"
             >
-              {currentUser.role === "coach" ? "🔒 Wyłącz Trenera" : "🔑 Zaloguj Trenera"}
+              🎓 Samouczek
             </button>
             <button
               onClick={handleLogout}
@@ -285,7 +284,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* PANEL ADMINA: ZARZĄDZANIE KONTAMI ZAWODNIKÓW (TYLKO DLA TRENERA) */}
+        {/* PANEL ADMINA: ZARZĄDZANIE KONTAMI DLA TRENERA */}
         {currentUser.role === "coach" && (
           <div className="bg-neutral-900/70 border border-red-900/40 rounded-3xl p-6 md:p-8 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3">
@@ -294,7 +293,7 @@ export default function ProfilePage() {
                   <span>👥</span> Panel Trenera: Zarządzanie Zawodnikami
                 </h2>
                 <p className="text-xs text-neutral-400 mt-0.5">
-                  Możesz usuwać nieaktywne lub testowe konta. Usunięcie profilu wyczyści także jego wpisy i treningi.
+                  Możesz usuwać konta. Usunięcie profilu wyczyści także jego wpisy i treningi.
                 </p>
               </div>
               <span className="text-xs font-mono font-bold bg-neutral-950 border border-neutral-800 text-neutral-300 px-3 py-1 rounded-xl">
