@@ -111,9 +111,6 @@ const STANDARD_DIFFICULTIES = [
   "Zaawansowany / Wyczyn",
 ];
 
-const TEAM_PASSWORD = "Kawashi2026";
-const COACH_PIN = "1234";
-
 const TUTORIAL_STEPS = [
   {
     title: "Witaj w ROAD TO GOAT! 🥋",
@@ -137,7 +134,7 @@ const TUTORIAL_STEPS = [
   },
   {
     title: "Timeline & Feedback Trenera 🎬",
-    desc: "W prawym górnym rogu wejdziesz w Timeline. Wrzucaj nagrania prób z sali lub raporty z ukończonych sesji, by Trener mógł zostawiać Ci bezpośrednie korekty techniczne.",
+    desc: "W prawym górnym rogu wejdziesz w Timeline. Wrzucaj nagrania prób z sali lub raporty z ukończonych sesji, by Trener mógł zostawiać Ci bezpośrednie wskazówki techniczne.",
     icon: "🎯",
   },
 ];
@@ -169,7 +166,6 @@ export default function Home() {
   const exerciseDropdownRef = useRef<HTMLDivElement>(null);
   const workoutDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Samouczek (Onboarding Tour)
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
 
@@ -322,23 +318,37 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchData();
-    const savedUserStr = localStorage.getItem("goat_athlete_profile");
-    if (savedUserStr) {
-      try {
-        const parsed = JSON.parse(savedUserStr);
-        setCurrentUser(parsed);
-        checkTimelineUnread(true);
+    async function checkAuthSession() {
+      const token = localStorage.getItem("goat_auth_token");
+      if (!token) return;
 
-        // Sprawdź czy tutorial był już oglądany
-        const seenTutorial = localStorage.getItem("goat_tutorial_seen");
-        if (!seenTutorial) {
-          setIsTutorialOpen(true);
+      try {
+        const res = await fetch("/api/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentUser(data.user);
+          localStorage.setItem("goat_athlete_profile", JSON.stringify(data.user));
+          checkTimelineUnread(true);
+
+          const seenTutorial = localStorage.getItem("goat_tutorial_seen");
+          if (!seenTutorial) {
+            setIsTutorialOpen(true);
+          }
+        } else {
+          setCurrentUser(null);
+          localStorage.removeItem("goat_athlete_profile");
+          localStorage.removeItem("goat_auth_token");
         }
       } catch {
-        setCurrentUser(null);
+        // Fallback w razie problemu z siecią
       }
     }
+
+    checkAuthSession();
+    fetchData();
   }, []);
 
   const closeTutorial = () => {
@@ -508,67 +518,53 @@ export default function Home() {
     const cleanNick = authUsername.trim();
     if (!cleanNick) return;
 
-    if (authIsCoach) {
-      if (authPassword !== COACH_PIN) {
-        alert("Błędny PIN Trenera!");
-        return;
-      }
-    } else {
-      if (authPassword !== TEAM_PASSWORD) {
-        alert("Błędne hasło drużyny!");
-        return;
-      }
-    }
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: cleanNick,
+          password: authPassword,
+          isCoach: authIsCoach,
+          mode: authMode,
+        }),
+      });
 
-    const assignedRole: "athlete" | "coach" = authIsCoach ? "coach" : "athlete";
+      const data = await res.json();
 
-    if (authMode === "register") {
-      const { error } = await supabase
-        .from("athlete_profiles")
-        .insert([{ username: cleanNick, role: assignedRole }]);
-
-      if (error) {
-        alert(error.code === "23505" ? "Nick jest już zajęty!" : error.message);
+      if (!res.ok) {
+        alert(data.error || "Błąd uwierzytelniania.");
         return;
       }
 
-      const userObj = { username: cleanNick, role: assignedRole };
-      setCurrentUser(userObj);
-      localStorage.setItem("goat_athlete_profile", JSON.stringify(userObj));
+      setCurrentUser(data.user);
+      localStorage.setItem("goat_athlete_profile", JSON.stringify(data.user));
+      localStorage.setItem("goat_auth_token", data.token);
+
       setIsAuthModalOpen(false);
       setAuthUsername("");
       setAuthPassword("");
       checkTimelineUnread(true);
 
-      // Nowy użytkownik - uruchom samouczek
-      localStorage.removeItem("goat_tutorial_seen");
-      setTutorialStep(0);
-      setIsTutorialOpen(true);
-    } else {
-      const { data, error } = await supabase
-        .from("athlete_profiles")
-        .select("*")
-        .eq("username", cleanNick)
-        .single();
-
-      if (error || !data) {
-        alert("Nie znaleziono konta.");
-        return;
+      if (authMode === "register") {
+        localStorage.removeItem("goat_tutorial_seen");
+        setTutorialStep(0);
+        setIsTutorialOpen(true);
       }
-
-      const userObj = { username: data.username, role: assignedRole };
-      setCurrentUser(userObj);
-      localStorage.setItem("goat_athlete_profile", JSON.stringify(userObj));
-      setIsAuthModalOpen(false);
-      setAuthUsername("");
-      setAuthPassword("");
-      checkTimelineUnread(true);
+    } catch {
+      alert("Błąd połączenia z serwerem logowania.");
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Ignoruj błąd sieci przy wylogowywaniu
+    }
     setCurrentUser(null);
     localStorage.removeItem("goat_athlete_profile");
+    localStorage.removeItem("goat_auth_token");
     setHasNewTimelinePosts(false);
   };
 
@@ -775,11 +771,10 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
-      {/* DYMKI SAMOUCZKA / ONBOARDING TOUR */}
+      {/* SAMOUCZEK / ONBOARDING TOUR */}
       {isTutorialOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95 duration-200">
-            {/* Header dymka */}
             <div className="flex items-center justify-between">
               <span className="text-3xl">{TUTORIAL_STEPS[tutorialStep].icon}</span>
               <div className="flex items-center gap-1.5">
@@ -800,7 +795,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Treść kroku */}
             <div className="space-y-2">
               <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-md">
                 Krok {tutorialStep + 1} z {TUTORIAL_STEPS.length}
@@ -813,7 +807,6 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Przyciski nawigacji w dymku */}
             <div className="flex items-center justify-between pt-2 border-t border-neutral-800/80">
               <button
                 onClick={prevTutorialStep}
@@ -839,7 +832,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* SEKCJA HERO BANNER */}
+      {/* HERO BANNER */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {heroImages.map((src, idx) => (
@@ -860,7 +853,6 @@ export default function Home() {
         </div>
 
         <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-6 pb-10 flex flex-col justify-between min-h-[480px] md:min-h-[540px]">
-          {/* TOP BAR */}
           <div className="flex items-start justify-between gap-4 w-full">
             {!currentUser ? (
               <div className="max-w-md bg-neutral-950/70 p-4 rounded-2xl backdrop-blur-md border border-neutral-800/80 shadow-2xl">
@@ -923,7 +915,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* DLA ZALOGOWANEGO: TYTUŁ I PODSUMOWANIE CELU STARTOWEGO */}
           {currentUser && (
             <div className="my-auto py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
               <div className="lg:col-span-2">
@@ -937,7 +928,6 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* KAFELEK: PRZYPOMNIENIE AKTUALNEGO CELU NA ZAWODY */}
               <div className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
                 <div className="border-b border-neutral-800/80 pb-2 mb-2.5">
                   <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -977,7 +967,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* PRZYCISKI AKCJI Z ROZWIJANYM MENU TRENINGÓW */}
           <div className="relative z-40 flex flex-wrap items-center justify-between gap-3 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1001,7 +990,6 @@ export default function Home() {
                   + Dodaj pozycję
                 </button>
 
-                {/* ROZWIJANY PRZYCISK: TRENINGI */}
                 <div className="relative inline-block" ref={workoutDropdownRef}>
                   <button
                     type="button"
@@ -1065,7 +1053,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PASEK KATEGORII Z BAZĄ ĆWICZEŃ */}
+      {/* PASEK KATEGORII */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
         <div className="flex flex-wrap items-center gap-2.5 pb-2 select-none border-b border-neutral-900 pb-3">
           <div className="relative" ref={exerciseDropdownRef}>
@@ -1302,7 +1290,7 @@ export default function Home() {
             </div>
           )
         ) : (
-          /* STANDARDOWA SIATKA ĆWICZEŃ */
+          /* STANDARDOWA SIATKA */
           loading ? (
             <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
               Ładowanie bazy...
