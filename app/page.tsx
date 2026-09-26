@@ -110,31 +110,37 @@ const STANDARD_DIFFICULTIES = [
   "Zaawansowany / Wyczyn",
 ];
 
-const TUTORIAL_STEPS = [
+// Definicja kroków tutoriala ze wskazaniem selektora elementu docelowego
+const TOUR_STEPS = [
   {
-    title: "Witaj w ROAD TO GOAT! 🥋",
-    desc: "Twoja baza przygotowania motorycznego, techniki trickingowej i form muzycznych. Przeprowadzimy Cię krótko po najważniejszych funkcjach.",
-    icon: "🚀",
+    targetId: "tour-header",
+    title: "Centrum Dowodzenia ROAD TO GOAT 🥋",
+    desc: "Witaj na platformie! Przeprowadzimy Cię bezpośrednio przez kluczowe elementy interfejsu.",
+    position: "bottom" as const,
   },
   {
-    title: "Baza Ćwiczeń & Skill Tree 📚",
-    desc: "W rozwijanym menu 'Baza Ćwiczeń' znajdziesz Tricking, Siłę, Plyometrię i Rozciąganie. Kliknięcie w kafelek pozwala zgłębić metodykę i zobaczyć co dany trick odblokowuje w drzewku.",
-    icon: "🌳",
+    targetId: "tour-exercise-base",
+    title: "Baza Ćwiczeń & Drzewko Skill Tree 📚",
+    desc: "Tutaj rozwijasz fundamenty trickingu, siły, plyo i rozciągania. Oznaczaj elementy, które już umiesz, a system ułoży pod Ciebie progresję.",
+    position: "bottom" as const,
   },
   {
-    title: "Własne Treningi & Tryb Sali 🏋️",
-    desc: "Twórz spersonalizowane jednostki według metodyki (Rozgrzewka → Wzmocnienie → Trick → Rozciąganie). Na sali kliknij 'Rozpocznij Trening', aby włączyć stoper, timer przerw i checklistę.",
-    icon: "⏱️",
+    targetId: "tour-workouts-btn",
+    title: "Kreator Treningów & Tryb Sali 🏋️",
+    desc: "W tym miejscu tworzysz własne jednostki lub importujesz plany od znajomych z ekipy. Na macie odpalasz Tryb Sali ze stoperem.",
+    position: "bottom" as const,
   },
   {
-    title: "Udostępnianie i Import Kodem 🔗",
-    desc: "Podoba Ci się trening kolegi? Każdy plan ma przycisk 'Udostępnij', generujący kod. Wystarczy kliknąć 'Importuj kodem', by zapisać go na swoim profilu.",
-    icon: "📥",
+    targetId: "tour-competition-widget",
+    title: "Automatyczny Plan na Zawody 🏆",
+    desc: "System sam wylicza fazę przygotowań (Baza -> Forma -> Szlif -> Tapering) na podstawie daty kolejnego startu!",
+    position: "top" as const,
   },
   {
+    targetId: "tour-timeline-btn",
     title: "Timeline & Feedback Trenera 🎬",
-    desc: "W prawym górnym rogu wejdziesz w Timeline. Wrzucaj nagrania prób z sali lub raporty z ukończonych sesji, by Trener mógł zostawiać Ci bezpośrednie wskazówki techniczne.",
-    icon: "🎯",
+    desc: "Tutaj wrzucasz swoje nagrania z sali lub meldujesz ukończenie treningu, a Trener nanosi wskazówki techniczne.",
+    position: "bottom" as const,
   },
 ];
 
@@ -165,8 +171,16 @@ export default function Home() {
   const exerciseDropdownRef = useRef<HTMLDivElement>(null);
   const workoutDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Samouczek Spotlight Guided Tour
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+
+  // Opanowane skille zawodnika (ID-ki ćwiczeń)
+  const [masteredSkillIds, setMasteredSkillIds] = useState<string[]>([]);
+
+  // Rekomendacja treningowa asystenta
+  const [showRecommendationModal, setShowRecommendationModal] = useState(false);
 
   const [heroImages, setHeroImages] = useState<string[]>([
     "/hero/hero1.jpg",
@@ -187,8 +201,10 @@ export default function Home() {
   const [authTeamCode, setAuthTeamCode] = useState("");
   const [authIsCoach, setAuthIsCoach] = useState(false);
 
+  // Zarządzanie Zawodami
   const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const [isCompModalOpen, setIsCompModalOpen] = useState(false);
+  const [isCompManagerOpen, setIsCompManagerOpen] = useState(false);
+  const [editingCompId, setEditingCompId] = useState<string | null>(null);
   const [compForm, setCompForm] = useState({ name: "", date: "", location: "" });
 
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
@@ -248,18 +264,13 @@ export default function Home() {
         const src = `/hero/hero${i}.jpg`;
         try {
           const res = await fetch(src, { method: "HEAD" });
-          if (res.ok) {
-            detected.push(src);
-          } else if (i > 6) {
-            break;
-          }
+          if (res.ok) detected.push(src);
+          else if (i > 6) break;
         } catch {
           if (i > 6) break;
         }
       }
-      if (detected.length > 0) {
-        setHeroImages(detected);
-      }
+      if (detected.length > 0) setHeroImages(detected);
     }
     detectAvailableImages();
   }, []);
@@ -288,6 +299,17 @@ export default function Home() {
       const lastReadTimeStr = localStorage.getItem("timeline_last_read");
       const lastReadTime = lastReadTimeStr ? parseInt(lastReadTimeStr, 10) : 0;
       setHasNewTimelinePosts(latestPostTime > lastReadTime);
+    }
+  };
+
+  const fetchMasteredSkills = async (username: string) => {
+    const { data } = await supabase
+      .from("mastered_skills")
+      .select("exercise_id")
+      .eq("username", username);
+
+    if (data) {
+      setMasteredSkillIds(data.map((item) => item.exercise_id));
     }
   };
 
@@ -332,10 +354,11 @@ export default function Home() {
           setCurrentUser(data.user);
           localStorage.setItem("goat_athlete_profile", JSON.stringify(data.user));
           checkTimelineUnread(true);
+          await fetchMasteredSkills(data.user.username);
 
           const seenTutorial = localStorage.getItem("goat_tutorial_seen");
           if (!seenTutorial) {
-            setIsTutorialOpen(true);
+            startGuidedTour();
           }
         } else {
           setCurrentUser(null);
@@ -351,13 +374,36 @@ export default function Home() {
     fetchData();
   }, []);
 
+  // Obsługa pozycjonowania dymka Spotlight Tour
+  const startGuidedTour = () => {
+    setTutorialStep(0);
+    setIsTutorialOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isTutorialOpen) return;
+    const currentStepConfig = TOUR_STEPS[tutorialStep];
+    if (!currentStepConfig) return;
+
+    const el = document.getElementById(currentStepConfig.targetId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        setTargetRect(el.getBoundingClientRect());
+      }, 300);
+    } else {
+      setTargetRect(null);
+    }
+  }, [tutorialStep, isTutorialOpen]);
+
   const closeTutorial = () => {
     setIsTutorialOpen(false);
     localStorage.setItem("goat_tutorial_seen", "true");
+    setTargetRect(null);
   };
 
   const nextTutorialStep = () => {
-    if (tutorialStep < TUTORIAL_STEPS.length - 1) {
+    if (tutorialStep < TOUR_STEPS.length - 1) {
       setTutorialStep((prev) => prev + 1);
     } else {
       closeTutorial();
@@ -369,6 +415,58 @@ export default function Home() {
       setTutorialStep((prev) => prev - 1);
     }
   };
+
+  // Toggle Opanowania Elementu
+  const toggleMasteredSkill = async (exerciseId: string) => {
+    if (!currentUser) {
+      alert("Zaloguj się, aby oznaczać opanowane tricki i śledzić swój postęp!");
+      return;
+    }
+
+    const alreadyMastered = masteredSkillIds.includes(exerciseId);
+
+    if (alreadyMastered) {
+      const { error } = await supabase
+        .from("mastered_skills")
+        .delete()
+        .eq("username", currentUser.username)
+        .eq("exercise_id", exerciseId);
+
+      if (!error) {
+        setMasteredSkillIds((prev) => prev.filter((id) => id !== exerciseId));
+      }
+    } else {
+      const { error } = await supabase
+        .from("mastered_skills")
+        .insert([{ username: currentUser.username, exercise_id: exerciseId }]);
+
+      if (!error) {
+        setMasteredSkillIds((prev) => [...prev, exerciseId]);
+      }
+    }
+  };
+
+  // Asystent Treningowy: Wyznaczenie kolejnego logicznego tricku
+  const recommendedSkill = useMemo(() => {
+    if (!currentUser || exercises.length === 0) return null;
+
+    // Szukamy tricków z Tricking, których zawodnik NIE potrafi, ale ma spełnione wszystkie prerequisites
+    const candidate = exercises.find((ex) => {
+      if (ex.category !== "Tricking") return false;
+      if (masteredSkillIds.includes(ex.id)) return false;
+
+      // Jeśli nie ma wymagań -> kandydat bazowy
+      if (!ex.prerequisite_ids || ex.prerequisite_ids.length === 0) return true;
+
+      // Sprawdzamy czy potrafi wszystkie wymagania
+      const hasAllPrereqs = ex.prerequisite_ids.every((prereqId) =>
+        masteredSkillIds.includes(prereqId)
+      );
+      return hasAllPrereqs;
+    });
+
+    return candidate || null;
+  }, [exercises, masteredSkillIds, currentUser]);
 
   useEffect(() => {
     if (activeSessionWorkout) {
@@ -554,11 +652,11 @@ export default function Home() {
       setAuthPassword("");
       setAuthTeamCode("");
       checkTimelineUnread(true);
+      await fetchMasteredSkills(data.user.username);
 
       if (authMode === "register") {
         localStorage.removeItem("goat_tutorial_seen");
-        setTutorialStep(0);
-        setIsTutorialOpen(true);
+        startGuidedTour();
       }
     } catch {
       alert("Błąd połączenia z serwerem logowania.");
@@ -569,9 +667,10 @@ export default function Home() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
-      // Ignoruj błąd
+      // Ignoruj
     }
     setCurrentUser(null);
+    setMasteredSkillIds([]);
     localStorage.removeItem("goat_athlete_profile");
     localStorage.removeItem("goat_auth_token");
     setHasNewTimelinePosts(false);
@@ -720,23 +819,55 @@ export default function Home() {
     });
   };
 
+  // Zarządzanie zawodami: Dodawanie / Edycja / Usuwanie
   const handleSaveCompetition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!compForm.name || !compForm.date) return;
 
-    const { data, error } = await supabase.from("competitions").insert([compForm]).select();
-    if (!error && data) {
-      setCompetitions((prev) =>
-        [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      );
-      setIsCompModalOpen(false);
-      setCompForm({ name: "", date: "", location: "" });
+    if (editingCompId) {
+      const { data, error } = await supabase
+        .from("competitions")
+        .update(compForm)
+        .eq("id", editingCompId)
+        .select();
+
+      if (!error && data) {
+        setCompetitions((prev) =>
+          prev
+            .map((c) => (c.id === editingCompId ? data[0] : c))
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        );
+        setEditingCompId(null);
+        setCompForm({ name: "", date: "", location: "" });
+      }
+    } else {
+      const { data, error } = await supabase.from("competitions").insert([compForm]).select();
+      if (!error && data) {
+        setCompetitions((prev) =>
+          [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        );
+        setCompForm({ name: "", date: "", location: "" });
+      }
     }
   };
 
+  const handleDeleteCompetition = async (id: string, name: string) => {
+    if (!confirm(`Czy na pewno usunąć zawody "${name}"?`)) return;
+    const { error } = await supabase.from("competitions").delete().eq("id", id);
+    if (!error) {
+      setCompetitions((prev) => prev.filter((c) => c.id !== id));
+      if (editingCompId === id) {
+        setEditingCompId(null);
+        setCompForm({ name: "", date: "", location: "" });
+      }
+    }
+  };
+
+  // Wyznaczanie TYLKO najbliższych nadchodzących zawodów
   const nextCompetition = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
-    return competitions.find((c) => c.date >= today) || competitions[0];
+    const upcoming = competitions.filter((c) => c.date >= today);
+    return upcoming.length > 0 ? upcoming[0] : null;
   }, [competitions]);
 
   const daysToComp = useMemo(() => {
@@ -755,7 +886,6 @@ export default function Home() {
     return workouts.filter((w) => w.author_username === currentUser.username);
   }, [workouts, currentUser]);
 
-  // Pomocnicza waga poziomu trudności dla sortowania
   const getLevelWeight = (diff: string) => {
     if (!diff) return 99;
     const lower = diff.toLowerCase();
@@ -791,7 +921,6 @@ export default function Home() {
       return true;
     });
 
-    // SORTOWANIE PO DRZEWKU PROGRESJI (Topologiczne + Poziomowe)
     return list.sort((a, b) => {
       if (b.prerequisite_ids?.includes(a.id)) return -1;
       if (a.prerequisite_ids?.includes(b.id)) return 1;
@@ -812,50 +941,73 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
-      {/* SAMOUCZEK */}
+      {/* SPOTLIGHT GUIDED TOUR OVERLAY */}
       {isTutorialOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-6 relative animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 pointer-events-auto">
+          {/* Ciemne tło z wycięciem podświetlanego elementu */}
+          <div className="absolute inset-0 bg-black/75 transition-all duration-300" />
+
+          {/* Ramka podświetlająca element docelowy */}
+          {targetRect && (
+            <div
+              className="absolute border-2 border-emerald-400 rounded-2xl shadow-[0_0_30px_rgba(52,211,153,0.4)] pointer-events-none transition-all duration-300"
+              style={{
+                top: targetRect.top + window.scrollY - 6,
+                left: targetRect.left + window.scrollX - 6,
+                width: targetRect.width + 12,
+                height: targetRect.height + 12,
+              }}
+            />
+          )}
+
+          {/* Dymek z opisem */}
+          <div
+            className="fixed z-50 bg-neutral-900 border border-emerald-500/60 rounded-3xl p-6 shadow-2xl max-w-sm w-[90vw] space-y-4 animate-in fade-in zoom-in-95 duration-200"
+            style={{
+              top: targetRect
+                ? Math.min(
+                    window.innerHeight - 240,
+                    Math.max(20, targetRect.bottom + 16)
+                  )
+                : "50%",
+              left: targetRect
+                ? Math.min(
+                    window.innerWidth - 340,
+                    Math.max(20, targetRect.left)
+                  )
+                : "50%",
+              transform: !targetRect ? "translate(-50%, -50%)" : "none",
+            }}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-3xl">{TUTORIAL_STEPS[tutorialStep].icon}</span>
-              <div className="flex items-center gap-1.5">
-                {TUTORIAL_STEPS.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                      i === tutorialStep ? "w-6 bg-emerald-400" : "w-1.5 bg-neutral-700"
-                    }`}
-                  />
-                ))}
-              </div>
+              <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2.5 py-0.5 rounded-full">
+                Krok {tutorialStep + 1} z {TOUR_STEPS.length}
+              </span>
               <button
                 onClick={closeTutorial}
-                className="text-neutral-500 hover:text-neutral-300 text-xs px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                className="text-neutral-500 hover:text-white text-xs px-2 py-1 cursor-pointer"
               >
                 Pomiń ✕
               </button>
             </div>
 
-            <div className="space-y-2">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-md">
-                Krok {tutorialStep + 1} z {TUTORIAL_STEPS.length}
-              </span>
-              <h3 className="text-xl font-extrabold text-white">
-                {TUTORIAL_STEPS[tutorialStep].title}
+            <div className="space-y-1.5">
+              <h3 className="text-base font-extrabold text-white">
+                {TOUR_STEPS[tutorialStep].title}
               </h3>
-              <p className="text-neutral-300 text-xs md:text-sm leading-relaxed">
-                {TUTORIAL_STEPS[tutorialStep].desc}
+              <p className="text-neutral-300 text-xs leading-relaxed">
+                {TOUR_STEPS[tutorialStep].desc}
               </p>
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-neutral-800/80">
+            <div className="flex items-center justify-between pt-2 border-t border-neutral-800">
               <button
                 onClick={prevTutorialStep}
                 disabled={tutorialStep === 0}
-                className={`text-xs px-3 py-1.5 rounded-xl font-medium transition-all ${
+                className={`text-xs px-3 py-1.5 rounded-xl font-medium ${
                   tutorialStep === 0
                     ? "opacity-30 cursor-not-allowed text-neutral-500"
-                    : "text-neutral-300 hover:bg-neutral-800"
+                    : "text-neutral-300 hover:bg-neutral-800 cursor-pointer"
                 }`}
               >
                 ‹ Wstecz
@@ -863,9 +1015,9 @@ export default function Home() {
 
               <button
                 onClick={nextTutorialStep}
-                className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
               >
-                <span>{tutorialStep === TUTORIAL_STEPS.length - 1 ? "Rozpocznij trening!" : "Dalej"}</span>
+                <span>{tutorialStep === TOUR_STEPS.length - 1 ? "Gotowe!" : "Dalej"}</span>
                 <span>➔</span>
               </button>
             </div>
@@ -896,7 +1048,7 @@ export default function Home() {
         <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-6 pb-10 flex flex-col justify-between min-h-[480px] md:min-h-[540px]">
           <div className="flex items-start justify-between gap-4 w-full">
             {!currentUser ? (
-              <div className="max-w-md bg-neutral-950/70 p-4 rounded-2xl backdrop-blur-md border border-neutral-800/80 shadow-2xl">
+              <div id="tour-header" className="max-w-md bg-neutral-950/70 p-4 rounded-2xl backdrop-blur-md border border-neutral-800/80 shadow-2xl">
                 <div className="inline-block border border-neutral-700/80 bg-neutral-900/90 rounded-xl px-4 py-2 shadow-lg mb-2.5">
                   <h1 className="text-2xl md:text-3xl font-black tracking-tight text-emerald-400 uppercase">
                     ROAD TO GOAT
@@ -912,6 +1064,7 @@ export default function Home() {
 
             <div className="flex items-center gap-3 ml-auto">
               <Link
+                id="tour-timeline-btn"
                 href="/timeline"
                 className={`relative flex items-center gap-2.5 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 hover:border-emerald-500/60 rounded-2xl shadow-xl transition-all active:scale-95 ${
                   currentUser ? "px-5 py-2.5 text-sm font-bold" : "px-3.5 py-1.5 text-xs font-medium"
@@ -958,21 +1111,46 @@ export default function Home() {
 
           {currentUser && (
             <div className="my-auto py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
-              <div className="lg:col-span-2">
+              <div id="tour-header" className="lg:col-span-2">
                 <div className="inline-block bg-neutral-900/80 backdrop-blur-md border border-neutral-700/80 rounded-2xl px-5 py-3 shadow-xl mb-3">
                   <h1 className="text-3xl md:text-5xl font-black tracking-tight text-emerald-400 uppercase">
                     ROAD TO GOAT
                   </h1>
                 </div>
                 <p className="text-neutral-200 text-xs md:text-sm max-w-xl leading-relaxed drop-shadow bg-neutral-950/50 p-3.5 rounded-xl backdrop-blur-sm border border-neutral-800/40">
-                  Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
+                  Opanowane elementy: <strong className="text-emerald-400">{masteredSkillIds.length}</strong>. 
+                  Nie wiesz, co dzisiaj trenować? Skorzystaj z inteligentnej rekomendacji kolejnego kroku w drzewku!
                 </p>
+
+                {/* SZYBKI ASYSTENT: REKOMENDACJA NASTĘPNEGO TRICKU */}
+                {recommendedSkill && (
+                  <div className="mt-3 inline-flex items-center gap-3 bg-emerald-950/50 border border-emerald-500/40 px-4 py-2 rounded-2xl backdrop-blur-md">
+                    <span className="text-xs text-neutral-300">
+                      🎯 Twój kolejny krok: <strong className="text-emerald-300">{recommendedSkill.title}</strong>
+                    </span>
+                    <button
+                      onClick={() => setShowRecommendationModal(true)}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-black text-[11px] font-bold px-3 py-1 rounded-xl transition-all cursor-pointer"
+                    >
+                      Pokaż metodykę →
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
-                <div className="border-b border-neutral-800/80 pb-2 mb-2.5">
+              {/* KAFELEK: PRZYPOMNIENIE AKTUALNEGO CELU NA ZAWODY (Z FAZĄ TYLKO DLA NAJBLIŻSZYCH) */}
+              <div
+                id="tour-competition-widget"
+                onClick={() => setIsCompManagerOpen(true)}
+                className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 hover:border-emerald-500/50 rounded-2xl p-4 shadow-xl cursor-pointer transition-all"
+                title="Kliknij, aby zarządzać zawodami"
+              >
+                <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
                   <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🏆</span> Aktualny Plan na Zawody
+                    <span>🏆</span> Najbliższy Start
+                  </span>
+                  <span className="text-[10px] text-emerald-400 hover:underline">
+                    Zarządzaj ({competitions.length}) ↗
                   </span>
                 </div>
 
@@ -994,20 +1172,21 @@ export default function Home() {
                       </div>
                       <div className="pt-1">
                         <span className="text-emerald-300 font-semibold bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 rounded-md inline-block">
-                          ⚡ {calculatedPhase}
+                          ⚡ Faza: {calculatedPhase}
                         </span>
                       </div>
                     </div>
                   </div>
                 ) : (
                   <div className="text-xs text-neutral-500 py-1">
-                    Brak zaplanowanych zawodów.
+                    Brak nadchodzących zawodów. Kliknij, aby zaplanować.
                   </div>
                 )}
               </div>
             </div>
           )}
 
+          {/* PRZYCISKI AKCJI Z ROZWIJANYM MENU TRENINGÓW */}
           <div className="relative z-40 flex flex-wrap items-center justify-between gap-3 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1031,7 +1210,7 @@ export default function Home() {
                   + Dodaj pozycję
                 </button>
 
-                <div className="relative inline-block" ref={workoutDropdownRef}>
+                <div className="relative inline-block" ref={workoutDropdownRef} id="tour-workouts-btn">
                   <button
                     type="button"
                     onClick={() => setIsWorkoutDropdownOpen((prev) => !prev)}
@@ -1070,7 +1249,7 @@ export default function Home() {
                 </div>
 
                 <button
-                  onClick={() => setIsCompModalOpen(true)}
+                  onClick={() => setIsCompManagerOpen(true)}
                   className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
                 >
                   🏆 Plan na zawody
@@ -1097,8 +1276,8 @@ export default function Home() {
       {/* PASEK KATEGORII: BAZA -> MUZYKA -> DIETA (+ WŁASNE TRENINGI GDY ZALOGOWANY) */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
         <div className="flex flex-wrap items-center gap-2.5 pb-2 select-none border-b border-neutral-900 pb-3">
-          {/* 1. ROZWIJANA BAZA ĆWICZEŃ */}
-          <div className="relative" ref={exerciseDropdownRef}>
+          {/* ROZWIJANA BAZA ĆWICZEŃ */}
+          <div className="relative" ref={exerciseDropdownRef} id="tour-exercise-base">
             <button
               onClick={() => setIsExerciseDropdownOpen(!isExerciseDropdownOpen)}
               className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer flex items-center gap-2 ${
@@ -1137,7 +1316,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* 2. MUZYKA */}
           <button
             onClick={() => {
               setActiveCategory("Muzyka");
@@ -1152,7 +1330,6 @@ export default function Home() {
             🎵 Muzyka
           </button>
 
-          {/* 3. DIETA */}
           <button
             onClick={() => {
               setActiveCategory("Dieta");
@@ -1167,7 +1344,6 @@ export default function Home() {
             🥗 Dieta
           </button>
 
-          {/* 4. WŁASNE TRENINGI: TYLKO DLA ZALOGOWANYCH */}
           {currentUser && (
             <button
               onClick={() => {
@@ -1356,7 +1532,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* STANDARDOWA SIATKA ĆWICZEŃ */}
+        {/* STANDARDOWA SIATKA ĆWICZEŃ Z PRZYCISKIEM "UMIEM TO" */}
         {activeCategory !== "Własne treningi" && (
           loading ? (
             <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
@@ -1372,14 +1548,17 @@ export default function Home() {
                 const isExpanded = !!expandedCardIds[item.id];
                 const primaryMedia = (item.sources && item.sources[0]) || item.video_url || "";
                 const isSpotify = primaryMedia.includes("spotify.com");
+                const isMastered = masteredSkillIds.includes(item.id);
 
                 return (
                   <div
                     key={item.id}
                     onClick={() => toggleExpand(item.id)}
                     className={`border rounded-2xl p-5 transition-all duration-300 select-none cursor-pointer flex flex-col justify-between ${
-                      isExpanded
-                        ? "bg-neutral-900/90 border-emerald-500/60 shadow-xl shadow-emerald-950/40"
+                      isMastered
+                        ? "bg-emerald-950/20 border-emerald-500/60 shadow-lg shadow-emerald-950/30"
+                        : isExpanded
+                        ? "bg-neutral-900/90 border-neutral-700 shadow-xl"
                         : "bg-neutral-900/60 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/80"
                     }`}
                   >
@@ -1402,13 +1581,38 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <h3
-                        className={`text-lg font-bold transition-colors ${
-                          isExpanded ? "text-emerald-300" : "text-white"
-                        }`}
-                      >
-                        {item.title}
-                      </h3>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3
+                          className={`text-lg font-bold transition-colors ${
+                            isMastered
+                              ? "text-emerald-300"
+                              : isExpanded
+                              ? "text-white"
+                              : "text-white"
+                          }`}
+                        >
+                          {item.title}
+                        </h3>
+
+                        {/* PRZYCISK OZNACZANIA "UMIEM TO" DLA ZALOGOWANEGO */}
+                        {currentUser && item.category !== "Muzyka" && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleMasteredSkill(item.id);
+                            }}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer shrink-0 ${
+                              isMastered
+                                ? "bg-emerald-500 text-black border-emerald-400"
+                                : "bg-neutral-950/80 text-neutral-400 border-neutral-700 hover:border-emerald-500 hover:text-emerald-300"
+                            }`}
+                            title={isMastered ? "Opanowane! Kliknij by odznaczyć" : "Oznacz jako opanowane"}
+                          >
+                            {isMastered ? "✓ Umiem to" : "+ Umiem to"}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div
@@ -1496,6 +1700,206 @@ export default function Home() {
           )
         )}
       </div>
+
+      {/* PANEL ZARZĄDZANIA ZAWODAMI (LISTA, EDYCJA, USUWANIE + FAZA DLA NAJBLIŻSZYCH) */}
+      {isCompManagerOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto space-y-6">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <span>🏆</span> Kalendarz Startowy & Zawody
+                </h2>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Faza przygotowań wyliczana jest wyłącznie dla najbliższego nadchodzącego startu.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsCompManagerOpen(false);
+                  setEditingCompId(null);
+                  setCompForm({ name: "", date: "", location: "" });
+                }}
+                className="text-neutral-400 hover:text-white text-sm px-2 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Formularz dodawania / edycji */}
+            {currentUser?.role === "coach" ? (
+              <form onSubmit={handleSaveCompetition} className="p-4 bg-neutral-950/80 border border-neutral-800 rounded-2xl space-y-3">
+                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                  {editingCompId ? "✏️ Edytuj Turniej" : "+ Dodaj Nowy Start"}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nazwa turnieju..."
+                    value={compForm.name}
+                    onChange={(e) => setCompForm({ ...compForm, name: e.target.value })}
+                    className="sm:col-span-2 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                  <input
+                    type="date"
+                    required
+                    value={compForm.date}
+                    onChange={(e) => setCompForm({ ...compForm, date: e.target.value })}
+                    className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Lokalizacja (np. Warszawa)..."
+                    value={compForm.location}
+                    onChange={(e) => setCompForm({ ...compForm, location: e.target.value })}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                  {editingCompId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCompId(null);
+                        setCompForm({ name: "", date: "", location: "" });
+                      }}
+                      className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-xs rounded-xl"
+                    >
+                      Anuluj
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs shrink-0 cursor-pointer"
+                  >
+                    {editingCompId ? "Zapisz" : "Dodaj"}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {/* Lista wszystkich zawodów */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
+                Zaplanowane starty w sezonie ({competitions.length}):
+              </h3>
+
+              {competitions.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-neutral-800 rounded-2xl text-xs text-neutral-500">
+                  Brak zaplanowanych imprez sportowych.
+                </div>
+              ) : (
+                competitions.map((comp) => {
+                  const isNext = nextCompetition?.id === comp.id;
+                  const isPast = new Date(comp.date).getTime() < new Date().setHours(0, 0, 0, 0);
+
+                  return (
+                    <div
+                      key={comp.id}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isNext
+                          ? "bg-emerald-950/30 border-emerald-500/60 shadow-lg shadow-emerald-950/20"
+                          : isPast
+                          ? "bg-neutral-950/40 border-neutral-900 opacity-60"
+                          : "bg-neutral-950/80 border-neutral-800"
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-white text-sm">{comp.name}</h4>
+                          {isNext && (
+                            <span className="text-[10px] font-bold text-black bg-emerald-400 px-2 py-0.5 rounded-full">
+                              Najbliższy Start
+                            </span>
+                          )}
+                          {isPast && (
+                            <span className="text-[10px] text-neutral-500 bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">
+                              Zakończone
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-4 text-xs text-neutral-400">
+                          <span>📅 {comp.date}</span>
+                          {comp.location && <span>📍 {comp.location}</span>}
+                        </div>
+
+                        {/* FAZA WYŚWIETLA SIĘ WYŁĄCZNIE DLA NAJBLIŻSZYCH ZAWODÓW */}
+                        {isNext && (
+                          <div className="pt-1">
+                            <span className="text-emerald-300 font-bold text-xs bg-emerald-950 border border-emerald-800/80 px-2.5 py-0.5 rounded-md inline-block">
+                              ⚡ Faza: {calculatedPhase}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {currentUser?.role === "coach" && (
+                        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                          <button
+                            onClick={() => {
+                              setEditingCompId(comp.id);
+                              setCompForm({
+                                name: comp.name,
+                                date: comp.date,
+                                location: comp.location || "",
+                              });
+                            }}
+                            className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs px-2.5 py-1.5 rounded-xl border border-neutral-700 cursor-pointer"
+                          >
+                            ✏️ Edytuj
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCompetition(comp.id, comp.name)}
+                            className="bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-xl border border-red-900/50 cursor-pointer"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REKOMENDACJI ASYSTENTA TRENINGOWEGO */}
+      {showRecommendationModal && recommendedSkill && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4">
+            <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
+              Inteligentna Rekomendacja z Drzewka
+            </span>
+            <h2 className="text-2xl font-black text-white">{recommendedSkill.title}</h2>
+            <p className="text-xs text-neutral-300 leading-relaxed">
+              {recommendedSkill.short_description}
+            </p>
+            {recommendedSkill.description && (
+              <div className="bg-neutral-950 p-4 rounded-2xl border border-neutral-800 text-xs text-neutral-400 leading-relaxed whitespace-pre-line">
+                {recommendedSkill.description}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setShowRecommendationModal(false)}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs rounded-xl"
+              >
+                Zamknij
+              </button>
+              <Link
+                href={`/exercise/${recommendedSkill.id}`}
+                className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-5 py-2 rounded-xl transition-all"
+              >
+                Przejdź do pełnej metodyki i wideo →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL IMPORTU TRENINGU */}
       {isImportModalOpen && (
@@ -1821,67 +2225,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* MODAL PLANOWANIA ZAWODÓW */}
-      {isCompModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-1">🏆 Zaplanuj Zawody</h2>
-            <form onSubmit={handleSaveCompetition} className="space-y-3">
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Nazwa turnieju *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="np. Mistrzostwa Polski Form Muzycznych"
-                  value={compForm.name}
-                  onChange={(e) => setCompForm({ ...compForm, name: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Data startu *</label>
-                  <input
-                    type="date"
-                    required
-                    value={compForm.date}
-                    onChange={(e) => setCompForm({ ...compForm, date: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Lokalizacja</label>
-                  <input
-                    type="text"
-                    placeholder="np. Warszawa"
-                    value={compForm.location}
-                    onChange={(e) => setCompForm({ ...compForm, location: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsCompModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
-                >
-                  Anuluj
-                </button>
-                <button
-                  type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
-                >
-                  Zapisz
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* MODAL LOGOWANIA I REJESTRACJI */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -1985,7 +2328,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* MODAL DODAWANIA POZYCJI */}
+      {/* MODAL DODAWANIA / EDYCJI POZYCJI BAZY */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
