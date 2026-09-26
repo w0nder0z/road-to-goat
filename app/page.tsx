@@ -114,15 +114,6 @@ const STANDARD_DIFFICULTIES = [
 const TEAM_PASSWORD = "Kawashi2026";
 const COACH_PIN = "1234";
 
-const HERO_IMAGES = [
-  "/hero/hero1.jpg",
-  "/hero/hero2.jpg",
-  "/hero/hero3.jpg",
-  "/hero/hero4.jpg",
-  "/hero/hero5.jpg",
-  "/hero/hero6.jpg",
-];
-
 function calculateCompetitionPhase(dateStr: string): string {
   if (!dateStr) return "Planowanie";
   const now = new Date();
@@ -145,10 +136,21 @@ export default function Home() {
   const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Menu rozwijane Bazy Ćwiczeń
+  // Dropdowny nawigacyjne
   const [isExerciseDropdownOpen, setIsExerciseDropdownOpen] = useState(false);
+  const [isWorkoutDropdownOpen, setIsWorkoutDropdownOpen] = useState(false);
   const exerciseDropdownRef = useRef<HTMLDivElement>(null);
+  const workoutDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Dynamiczna lista zdjęć w tle (obsługuje automatycznie hero7.jpg, hero8.jpg...)
+  const [heroImages, setHeroImages] = useState<string[]>([
+    "/hero/hero1.jpg",
+    "/hero/hero2.jpg",
+    "/hero/hero3.jpg",
+    "/hero/hero4.jpg",
+    "/hero/hero5.jpg",
+    "/hero/hero6.jpg",
+  ]);
   const [currentHeroIdx, setCurrentHeroIdx] = useState(0);
   const [hasNewTimelinePosts, setHasNewTimelinePosts] = useState(false);
 
@@ -169,7 +171,7 @@ export default function Home() {
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
 
-  // Import treningu od innego użytkownika
+  // Import treningu
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importCode, setImportCode] = useState("");
 
@@ -203,23 +205,52 @@ export default function Home() {
     prerequisite_ids: [] as string[],
   });
 
-  // Zamykanie dropdownu przy kliknięciu poza
+  // Zamykanie dropdownów przy kliknięciu poza nimi
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (exerciseDropdownRef.current && !exerciseDropdownRef.current.contains(event.target as Node)) {
         setIsExerciseDropdownOpen(false);
+      }
+      if (workoutDropdownRef.current && !workoutDropdownRef.current.contains(event.target as Node)) {
+        setIsWorkoutDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Automatyczne skanowanie kolejnych zdjęć (od hero1 do hero20)
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentHeroIdx((prev) => (prev + 1) % HERO_IMAGES.length);
-    }, 10000);
-    return () => clearInterval(timer);
+    async function detectAvailableImages() {
+      const detected: string[] = [];
+      for (let i = 1; i <= 20; i++) {
+        const src = `/hero/hero${i}.jpg`;
+        try {
+          const res = await fetch(src, { method: "HEAD" });
+          if (res.ok) {
+            detected.push(src);
+          } else if (i > 6) {
+            break;
+          }
+        } catch {
+          if (i > 6) break;
+        }
+      }
+      if (detected.length > 0) {
+        setHeroImages(detected);
+      }
+    }
+    detectAvailableImages();
   }, []);
+
+  // Rotacja zdjęć w tle co 20 sekund
+  useEffect(() => {
+    if (heroImages.length === 0) return;
+    const timer = setInterval(() => {
+      setCurrentHeroIdx((prev) => (prev + 1) % heroImages.length);
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [heroImages]);
 
   const checkTimelineUnread = async (userLoggedIn: boolean) => {
     if (!userLoggedIn) {
@@ -280,7 +311,7 @@ export default function Home() {
     }
   }, []);
 
-  // Stoper sesji
+  // Obsługa stopera sesji
   useEffect(() => {
     if (activeSessionWorkout) {
       sessionTimerRef.current = setInterval(() => {
@@ -297,7 +328,7 @@ export default function Home() {
     };
   }, [activeSessionWorkout]);
 
-  // Timer przerw
+  // Obsługa timera przerw
   useEffect(() => {
     if (restTimerSeconds !== null && restTimerSeconds > 0) {
       restTimerRef.current = setInterval(() => {
@@ -352,12 +383,11 @@ export default function Home() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Udostępnienie ukończonego treningu na Timeline
   const handlePublishWorkoutToTimeline = async (wo: Workout, durationStr: string) => {
     if (!currentUser) return;
     const notesInput = prompt(
-      `Dodaj krótki komentarz z treningu "${wo.title}" (lub zostaw puste):`,
-      `Ukończono cały plan! Czas: ${durationStr}`
+      `Dodaj komentarz z treningu "${wo.title}" (lub zostaw puste):`,
+      `Ukończono cały plan! Czas trwania jednostki: ${durationStr}`
     );
 
     if (notesInput === null) return;
@@ -374,20 +404,18 @@ export default function Home() {
 
     const { error } = await supabase.from("progress_submissions").insert([payload]);
     if (!error) {
-      alert("Twój trening został udostępniony na osi czasu ekipy! 🔥");
+      alert("Trening opublikowany na Timeline ekipy! 🔥");
       setActiveSessionWorkout(null);
     } else {
-      alert("Błąd publikacji: " + error.message);
+      alert("Błąd: " + error.message);
     }
   };
 
-  // Kopiowanie kodu udostępniania treningu
   const handleCopyShareCode = (workoutId: string, title: string) => {
     navigator.clipboard.writeText(workoutId);
-    alert(`Skopiowano kod treningu "${title}" do schowka! Wyślij go innej osobie.`);
+    alert(`Skopiowano kod treningu "${title}"! Przekaż go innej osobie.`);
   };
 
-  // Import treningu od znajomego
   const handleImportWorkout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importCode.trim() || !currentUser) return;
@@ -400,7 +428,7 @@ export default function Home() {
       .single();
 
     if (error || !targetWorkout) {
-      alert("Nie znaleziono treningu o tym kodzie! Sprawdź poprawność.");
+      alert("Nie znaleziono treningu o tym kodzie!");
       return;
     }
 
@@ -422,7 +450,7 @@ export default function Home() {
       setWorkouts((prev) => [inserted[0], ...prev]);
       setIsImportModalOpen(false);
       setImportCode("");
-      alert(`Pomyślnie zaimportowano trening autorstwa "${payload.original_author}"!`);
+      alert(`Zaimportowano trening od zawodnika "${payload.original_author}"!`);
     } else {
       alert("Błąd importu: " + insertErr?.message);
     }
@@ -610,7 +638,7 @@ export default function Home() {
   };
 
   const handleDeleteWorkout = async (id: string, title: string) => {
-    if (!confirm(`Czy na pewno chcesz usunąć trening "${title}"?`)) return;
+    if (!confirm(`Czy na pewno usunąć trening "${title}"?`)) return;
     const { error } = await supabase.from("workouts").delete().eq("id", id);
     if (!error) {
       setWorkouts((prev) => prev.filter((w) => w.id !== id));
@@ -698,7 +726,7 @@ export default function Home() {
       {/* SEKCJA HERO BANNER */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {HERO_IMAGES.map((src, idx) => (
+          {heroImages.map((src, idx) => (
             <div
               key={idx}
               className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
@@ -779,7 +807,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* TYTUŁ DLA ZALOGOWANEGO */}
+          {/* DLA ZALOGOWANEGO: TYTUŁ I PODSUMOWANIE CELU STARTOWEGO */}
           {currentUser && (
             <div className="my-auto py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
               <div className="lg:col-span-2">
@@ -793,20 +821,12 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* CEL STARTOWY */}
+              {/* KAFELEK: PRZYPOMNIENIE AKTUALNEGO CELU NA ZAWODY (BEZ PLUSA ZAPLANUJ) */}
               <div className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
+                <div className="border-b border-neutral-800/80 pb-2 mb-2.5">
                   <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🏆</span> Cel Startowy
+                    <span>🏆</span> Aktualny Plan na Zawody
                   </span>
-                  {currentUser.role === "coach" && (
-                    <button
-                      onClick={() => setIsCompModalOpen(true)}
-                      className="text-[10px] text-emerald-400 hover:underline cursor-pointer"
-                    >
-                      + Zaplanuj
-                    </button>
-                  )}
                 </div>
 
                 {nextCompetition ? (
@@ -841,7 +861,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* PRZYCISKI AKCJI */}
+          {/* PRZYCISKI AKCJI Z ROZWIJANYM MENU TRENINGÓW */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2.5">
@@ -865,19 +885,41 @@ export default function Home() {
                   + Dodaj pozycję
                 </button>
 
-                <button
-                  onClick={() => setIsWorkoutModalOpen(true)}
-                  className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
-                >
-                  🏋️ Stwórz Trening
-                </button>
+                {/* ROZWIJANY PRZYCISK: TRENINGI (STWÓRZ / IMPORTUJ) */}
+                <div className="relative" ref={workoutDropdownRef}>
+                  <button
+                    onClick={() => setIsWorkoutDropdownOpen(!isWorkoutDropdownOpen)}
+                    className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>🏋️ Treningi</span>
+                    <span className="text-[10px] opacity-70">▾</span>
+                  </button>
 
-                <button
-                  onClick={() => setIsImportModalOpen(true)}
-                  className="bg-neutral-900/90 hover:bg-neutral-800 text-emerald-400 border border-emerald-500/40 hover:border-emerald-500 px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
-                >
-                  📥 Importuj Trening
-                </button>
+                  {isWorkoutDropdownOpen && (
+                    <div className="absolute left-0 mt-2 w-52 bg-neutral-900 border border-neutral-800 rounded-2xl p-2 shadow-2xl z-30 space-y-1">
+                      <button
+                        onClick={() => {
+                          setIsWorkoutDropdownOpen(false);
+                          setIsWorkoutModalOpen(true);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2"
+                      >
+                        <span>✨</span>
+                        <span>Stwórz Nowy Trening</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsWorkoutDropdownOpen(false);
+                          setIsImportModalOpen(true);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2"
+                      >
+                        <span>📥</span>
+                        <span>Importuj Kodem od Kolegi</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <button
                   onClick={() => setIsCompModalOpen(true)}
@@ -890,8 +932,9 @@ export default function Home() {
               <div />
             )}
 
+            {/* WSKAŹNIK KARUZELI */}
             <div className="hidden sm:flex items-center gap-1.5 opacity-60">
-              {HERO_IMAGES.map((_, i) => (
+              {heroImages.map((_, i) => (
                 <div
                   key={i}
                   className={`h-1.5 rounded-full transition-all duration-500 ${
@@ -904,11 +947,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* NOWY PASEK KATEGORII Z ROZWIJANYM MENU DLA BAZY ĆWICZEŃ */}
+      {/* PASEK KATEGORII Z BAZĄ ĆWICZEŃ */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
         <div className="flex flex-wrap items-center gap-2.5 pb-2 select-none border-b border-neutral-900 pb-3">
-          
-          {/* ROZWIJANA BAZA ĆWICZEŃ */}
           <div className="relative" ref={exerciseDropdownRef}>
             <button
               onClick={() => setIsExerciseDropdownOpen(!isExerciseDropdownOpen)}
@@ -948,7 +989,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* POZOSTAŁE KATEGORIE GŁÓWNE */}
           {OTHER_CATEGORIES.map((cat) => (
             <button
               key={cat}
@@ -1020,7 +1060,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* WŁASNE TRENINGI Z OPCJĄ UDOSTĘPNIANIA I RAPORTU NA TIMELINE */}
+        {/* WŁASNE TRENINGI */}
         {activeCategory === "Własne treningi" ? (
           !currentUser ? (
             <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
@@ -1134,7 +1174,7 @@ export default function Home() {
             </div>
           )
         ) : (
-          /* STANDARDOWA SIATKA KART */
+          /* STANDARDOWA SIATKA ĆWICZEŃ */
           loading ? (
             <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
               Ładowanie bazy...
@@ -1274,13 +1314,13 @@ export default function Home() {
         )}
       </div>
 
-      {/* MODAL IMPORTU TRENINGU OD ZNAJOMEGO */}
+      {/* MODAL IMPORTU TRENINGU */}
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-lg font-bold text-white mb-1">📥 Importuj Trening od Innego Zawodnika</h2>
             <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Wklej kod treningu (ID), który udostępnił Ci Marek lub inny członek ekipy.
+              Wklej kod treningu (UUID), który udostępnił Ci Marek lub inny członek ekipy.
             </p>
 
             <form onSubmit={handleImportWorkout} className="space-y-4">
@@ -1316,7 +1356,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* TRYB SALI Z PRZYCISKIEM ZAKOŃCZENIA I PUBLIKACJI */}
+      {/* TRYB SALI */}
       {activeSessionWorkout && (
         <div className="fixed inset-0 bg-neutral-950/95 backdrop-blur-md z-50 p-4 md:p-8 flex flex-col justify-between overflow-y-auto">
           <div className="max-w-3xl w-full mx-auto space-y-6">
@@ -1347,7 +1387,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Pasek stopera i przerw */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-neutral-900/80 border border-neutral-800 p-5 rounded-2xl">
               <div>
                 <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
@@ -1390,7 +1429,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Lista ćwiczeń do odhaczania */}
             <div className="space-y-3">
               {activeSessionWorkout.exercise_ids.map((exId, idx) => {
                 const ex = exercises.find((e) => e.id === exId);
@@ -1484,7 +1522,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* 4 BLOKI METODYCZNE */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
                 <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
                   🔥 Krok 1: Rozgrzewka & Mobilność ({workoutForm.warmup_ids.length})
