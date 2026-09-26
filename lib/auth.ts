@@ -10,6 +10,32 @@ export interface TokenPayload {
   role: "athlete" | "coach";
 }
 
+// Bezpieczne haszowanie hasła użytkownika z solą serwerową
+export async function hashPassword(password: string): Promise<string> {
+  const enc = new TextEncoder();
+  const salt = process.env.JWT_SECRET || "kawashi_salt_2026";
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password + salt),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits", "deriveKey"]
+  );
+
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: enc.encode(salt),
+      iterations: 100000,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    256
+  );
+
+  return Buffer.from(derivedBits).toString("hex");
+}
+
 export async function createSessionToken(payload: TokenPayload): Promise<string> {
   return await new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
