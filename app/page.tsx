@@ -24,6 +24,7 @@ interface Workout {
   level: string;
   exercise_ids: string[];
   author_username?: string;
+  original_author?: string;
   created_at: string;
 }
 
@@ -32,18 +33,10 @@ interface Competition {
   name: string;
   date: string;
   location?: string;
-  phase?: string;
 }
 
-const MAIN_CATEGORIES = [
-  "Tricking",
-  "Plyometria",
-  "Siła",
-  "Rozciąganie",
-  "Dieta",
-  "Własne treningi",
-  "Muzyka",
-];
+const EXERCISE_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie"];
+const OTHER_CATEGORIES = ["Dieta", "Własne treningi", "Muzyka"];
 
 const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
   Tricking: [
@@ -130,7 +123,6 @@ const HERO_IMAGES = [
   "/hero/hero6.jpg",
 ];
 
-// Automatyczny kalkulator fazy przygotowań do zawodów
 function calculateCompetitionPhase(dateStr: string): string {
   if (!dateStr) return "Planowanie";
   const now = new Date();
@@ -153,6 +145,10 @@ export default function Home() {
   const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Menu rozwijane Bazy Ćwiczeń
+  const [isExerciseDropdownOpen, setIsExerciseDropdownOpen] = useState(false);
+  const exerciseDropdownRef = useRef<HTMLDivElement>(null);
+
   const [currentHeroIdx, setCurrentHeroIdx] = useState(0);
   const [hasNewTimelinePosts, setHasNewTimelinePosts] = useState(false);
 
@@ -165,11 +161,7 @@ export default function Home() {
 
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
-  const [compForm, setCompForm] = useState({
-    name: "",
-    date: "",
-    location: "",
-  });
+  const [compForm, setCompForm] = useState({ name: "", date: "", location: "" });
 
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
@@ -177,7 +169,11 @@ export default function Home() {
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
 
-  // KREATOR TRENINGU
+  // Import treningu od innego użytkownika
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importCode, setImportCode] = useState("");
+
+  // Kreator treningu
   const [workoutForm, setWorkoutForm] = useState({
     title: "",
     description: "",
@@ -188,7 +184,7 @@ export default function Home() {
     cooldown_ids: [] as string[],
   });
 
-  // TRYB SALI / SESJA TRENINGOWA
+  // Tryb Sali
   const [activeSessionWorkout, setActiveSessionWorkout] = useState<Workout | null>(null);
   const [sessionCompletedIds, setSessionCompletedIds] = useState<string[]>([]);
   const [sessionElapsedTime, setSessionElapsedTime] = useState(0);
@@ -207,6 +203,17 @@ export default function Home() {
     prerequisite_ids: [] as string[],
   });
 
+  // Zamykanie dropdownu przy kliknięciu poza
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (exerciseDropdownRef.current && !exerciseDropdownRef.current.contains(event.target as Node)) {
+        setIsExerciseDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentHeroIdx((prev) => (prev + 1) % HERO_IMAGES.length);
@@ -219,7 +226,6 @@ export default function Home() {
       setHasNewTimelinePosts(false);
       return;
     }
-
     const { data: latestPost } = await supabase
       .from("progress_submissions")
       .select("created_at")
@@ -262,7 +268,6 @@ export default function Home() {
 
   useEffect(() => {
     fetchData();
-
     const savedUserStr = localStorage.getItem("goat_athlete_profile");
     if (savedUserStr) {
       try {
@@ -275,7 +280,7 @@ export default function Home() {
     }
   }, []);
 
-  // Obsługa stopera głównego sesji treningowej
+  // Stoper sesji
   useEffect(() => {
     if (activeSessionWorkout) {
       sessionTimerRef.current = setInterval(() => {
@@ -292,7 +297,7 @@ export default function Home() {
     };
   }, [activeSessionWorkout]);
 
-  // Obsługa timera przerw
+  // Timer przerw
   useEffect(() => {
     if (restTimerSeconds !== null && restTimerSeconds > 0) {
       restTimerRef.current = setInterval(() => {
@@ -326,7 +331,7 @@ export default function Home() {
       osc.start();
       osc.stop(audioCtx.currentTime + 0.3);
     } catch {
-      // Dźwięk pomijany jeśli Web Audio nie jest wspierany
+      // Audio fallback
     }
   };
 
@@ -347,14 +352,86 @@ export default function Home() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // Udostępnienie ukończonego treningu na Timeline
+  const handlePublishWorkoutToTimeline = async (wo: Workout, durationStr: string) => {
+    if (!currentUser) return;
+    const notesInput = prompt(
+      `Dodaj krótki komentarz z treningu "${wo.title}" (lub zostaw puste):`,
+      `Ukończono cały plan! Czas: ${durationStr}`
+    );
+
+    if (notesInput === null) return;
+
+    const payload = {
+      athlete_name: currentUser.username,
+      exercise_id: wo.id,
+      exercise_title: `Trening: ${wo.title}`,
+      video_url: null,
+      notes: notesInput,
+      post_type: "workout_summary",
+      workout_duration: durationStr,
+    };
+
+    const { error } = await supabase.from("progress_submissions").insert([payload]);
+    if (!error) {
+      alert("Twój trening został udostępniony na osi czasu ekipy! 🔥");
+      setActiveSessionWorkout(null);
+    } else {
+      alert("Błąd publikacji: " + error.message);
+    }
+  };
+
+  // Kopiowanie kodu udostępniania treningu
+  const handleCopyShareCode = (workoutId: string, title: string) => {
+    navigator.clipboard.writeText(workoutId);
+    alert(`Skopiowano kod treningu "${title}" do schowka! Wyślij go innej osobie.`);
+  };
+
+  // Import treningu od znajomego
+  const handleImportWorkout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importCode.trim() || !currentUser) return;
+
+    const cleanId = importCode.trim();
+    const { data: targetWorkout, error } = await supabase
+      .from("workouts")
+      .select("*")
+      .eq("id", cleanId)
+      .single();
+
+    if (error || !targetWorkout) {
+      alert("Nie znaleziono treningu o tym kodzie! Sprawdź poprawność.");
+      return;
+    }
+
+    const payload = {
+      title: targetWorkout.title,
+      description: targetWorkout.description,
+      level: targetWorkout.level,
+      exercise_ids: targetWorkout.exercise_ids,
+      author_username: currentUser.username,
+      original_author: targetWorkout.author_username || "Inny zawodnik",
+    };
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from("workouts")
+      .insert([payload])
+      .select();
+
+    if (!insertErr && inserted) {
+      setWorkouts((prev) => [inserted[0], ...prev]);
+      setIsImportModalOpen(false);
+      setImportCode("");
+      alert(`Pomyślnie zaimportowano trening autorstwa "${payload.original_author}"!`);
+    } else {
+      alert("Błąd importu: " + insertErr?.message);
+    }
+  };
+
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanNick = authUsername.trim();
-
-    if (!cleanNick) {
-      alert("Wpisz swój nick!");
-      return;
-    }
+    if (!cleanNick) return;
 
     if (authIsCoach) {
       if (authPassword !== COACH_PIN) {
@@ -376,11 +453,7 @@ export default function Home() {
         .insert([{ username: cleanNick, role: assignedRole }]);
 
       if (error) {
-        if (error.code === "23505") {
-          alert("Ten nick jest już zajęty! Kliknij 'Zaloguj się'.");
-        } else {
-          alert("Błąd rejestracji: " + error.message);
-        }
+        alert(error.code === "23505" ? "Nick jest już zajęty!" : error.message);
         return;
       }
 
@@ -399,7 +472,7 @@ export default function Home() {
         .single();
 
       if (error || !data) {
-        alert("Nie znaleziono takiego konta. Kliknij 'Stwórz nowe konto' poniżej.");
+        alert("Nie znaleziono konta.");
         return;
       }
 
@@ -618,6 +691,8 @@ export default function Home() {
     });
   }, [exercises, activeCategory, activeSubcategory, activeTrickingLevel, searchTerm]);
 
+  const isExerciseCategoryActive = EXERCISE_CATEGORIES.includes(activeCategory);
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
       {/* SEKCJA HERO BANNER */}
@@ -687,9 +762,12 @@ export default function Home() {
                 </button>
               ) : (
                 <div className="flex items-center gap-2 bg-neutral-900/90 border border-neutral-700/80 p-1.5 rounded-2xl shadow-xl">
-                  <span className="text-sm text-emerald-400 font-bold px-3 py-1 bg-neutral-950/80 border border-neutral-800 rounded-xl">
+                  <Link
+                    href="/profile"
+                    className="text-sm text-emerald-400 hover:text-emerald-300 font-bold px-3 py-1 bg-neutral-950/80 border border-neutral-800 rounded-xl"
+                  >
                     👤 {currentUser.username} {currentUser.role === "coach" && "(Admin)"}
-                  </span>
+                  </Link>
                   <button
                     onClick={handleLogout}
                     className="bg-neutral-900 hover:bg-red-950/60 border border-neutral-800 hover:border-red-800 text-xs px-3 py-1.5 rounded-xl text-neutral-400 hover:text-red-300 transition-all cursor-pointer font-medium"
@@ -701,7 +779,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* DLA ZALOGOWANEGO: TYTUŁ + AUTOMATYCZNY KALENDARZ */}
+          {/* TYTUŁ DLA ZALOGOWANEGO */}
           {currentUser && (
             <div className="my-auto py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
               <div className="lg:col-span-2">
@@ -715,11 +793,11 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* CEL STARTOWY Z AUTOMATYCZNĄ FAZĄ */}
+              {/* CEL STARTOWY */}
               <div className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 shadow-xl">
                 <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
                   <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🏆</span> Cel Startowy (System)
+                    <span>🏆</span> Cel Startowy
                   </span>
                   {currentUser.role === "coach" && (
                     <button
@@ -795,6 +873,13 @@ export default function Home() {
                 </button>
 
                 <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="bg-neutral-900/90 hover:bg-neutral-800 text-emerald-400 border border-emerald-500/40 hover:border-emerald-500 px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+                >
+                  📥 Importuj Trening
+                </button>
+
+                <button
                   onClick={() => setIsCompModalOpen(true)}
                   className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
                 >
@@ -819,10 +904,52 @@ export default function Home() {
         </div>
       </section>
 
-      {/* GŁÓWNA NAWIGACJA KATEGORII */}
+      {/* NOWY PASEK KATEGORII Z ROZWIJANYM MENU DLA BAZY ĆWICZEŃ */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none select-none border-b border-neutral-900 pb-3">
-          {MAIN_CATEGORIES.map((cat) => (
+        <div className="flex flex-wrap items-center gap-2.5 pb-2 select-none border-b border-neutral-900 pb-3">
+          
+          {/* ROZWIJANA BAZA ĆWICZEŃ */}
+          <div className="relative" ref={exerciseDropdownRef}>
+            <button
+              onClick={() => setIsExerciseDropdownOpen(!isExerciseDropdownOpen)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer flex items-center gap-2 ${
+                isExerciseCategoryActive
+                  ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
+                  : "bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-800"
+              }`}
+            >
+              <span>📚 Baza Ćwiczeń</span>
+              <span className="text-[10px] opacity-75">
+                {isExerciseCategoryActive ? `(${activeCategory})` : "▾"}
+              </span>
+            </button>
+
+            {isExerciseDropdownOpen && (
+              <div className="absolute left-0 mt-2 w-48 bg-neutral-900 border border-neutral-800 rounded-2xl p-2 shadow-2xl z-30 space-y-1">
+                {EXERCISE_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => {
+                      setActiveCategory(cat);
+                      setActiveSubcategory(SUBCATEGORIES_CONFIG[cat][0]);
+                      setActiveTrickingLevel("Wszystkie poziomy");
+                      setIsExerciseDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                      activeCategory === cat
+                        ? "bg-emerald-500/20 text-emerald-400 font-bold"
+                        : "text-neutral-300 hover:bg-neutral-800"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* POZOSTAŁE KATEGORIE GŁÓWNE */}
+          {OTHER_CATEGORIES.map((cat) => (
             <button
               key={cat}
               onClick={() => {
@@ -836,7 +963,7 @@ export default function Home() {
                   : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
               }`}
             >
-              {cat === "Muzyka" ? "🎵 Muzyka" : cat === "Własne treningi" ? "📋 Własne treningi" : cat}
+              {cat === "Muzyka" ? "🎵 Muzyka" : cat === "Własne treningi" ? "📋 Własne treningi" : cat === "Dieta" ? "🥗 Dieta" : cat}
             </button>
           ))}
         </div>
@@ -893,15 +1020,29 @@ export default function Home() {
           </div>
         )}
 
-        {/* WIDOK: WŁASNE TRENINGI */}
+        {/* WŁASNE TRENINGI Z OPCJĄ UDOSTĘPNIANIA I RAPORTU NA TIMELINE */}
         {activeCategory === "Własne treningi" ? (
           !currentUser ? (
             <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
-              Zaloguj się, aby tworzyć i realizować plany treningowe.
+              Zaloguj się, aby tworzyć, udostępniać i realizować plany treningowe.
             </div>
           ) : visibleWorkouts.length === 0 ? (
-            <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
-              Nie masz jeszcze zapisanych treningów. Kliknij u góry <strong>„Stwórz Trening”</strong>!
+            <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl space-y-3">
+              <p>Nie masz jeszcze zapisanych treningów.</p>
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => setIsWorkoutModalOpen(true)}
+                  className="bg-emerald-500 text-black font-bold text-xs px-4 py-2 rounded-xl"
+                >
+                  + Stwórz Trening
+                </button>
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="bg-neutral-900 text-emerald-400 border border-emerald-500/40 text-xs px-4 py-2 rounded-xl"
+                >
+                  📥 Importuj kod
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
@@ -915,13 +1056,24 @@ export default function Home() {
                     className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 space-y-4 hover:border-emerald-500/40 transition-colors"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
-                        {wo.level}
-                      </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-neutral-500 font-mono">
-                          {wo.exercise_ids?.length || 0} ćwiczeń
+                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
+                          {wo.level}
                         </span>
+                        {wo.original_author && (
+                          <span className="text-[10px] text-amber-300 bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 rounded-md">
+                            Od: {wo.original_author}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleCopyShareCode(wo.id, wo.title)}
+                          className="text-xs text-neutral-400 hover:text-emerald-400 px-2 py-0.5 bg-neutral-950 border border-neutral-800 rounded-md cursor-pointer"
+                          title="Kopiuj kod udostępnienia"
+                        >
+                          🔗 Udostępnij
+                        </button>
                         <button
                           onClick={() => handleDeleteWorkout(wo.id, wo.title)}
                           className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5 bg-red-950/40 border border-red-900/50 rounded-md cursor-pointer"
@@ -937,23 +1089,31 @@ export default function Home() {
                       <p className="text-xs text-neutral-400 leading-relaxed">{wo.description}</p>
                     </div>
 
-                    {/* PRZYCISK ODPALENIA SESJI NA SALI */}
-                    <button
-                      onClick={() => setActiveSessionWorkout(wo)}
-                      className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <span>▶ Rozpocznij Trening na Sali</span>
-                    </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setActiveSessionWorkout(wo)}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-500/20 active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <span>▶ Rozpocznij Trening</span>
+                      </button>
+
+                      <button
+                        onClick={() => handlePublishWorkoutToTimeline(wo, "45 min")}
+                        className="bg-neutral-950 hover:bg-neutral-800 border border-neutral-700/80 text-emerald-400 text-xs py-2.5 rounded-xl transition-all font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <span>🏆 Wrzuć na Timeline</span>
+                      </button>
+                    </div>
 
                     <div className="space-y-2 border-t border-neutral-800/80 pt-3">
                       <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-                        Kolejność w jednostce:
+                        Ćwiczenia w planie ({includedExercises.length}):
                       </p>
                       <div className="space-y-1.5">
                         {includedExercises.map((ex, i) => (
                           <div
                             key={ex.id}
-                            className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-xl text-xs border border-neutral-800/80"
+                            className="flex items-center justify-between p-2 bg-neutral-950 rounded-xl text-xs border border-neutral-800/80"
                           >
                             <span className="text-neutral-300 font-medium">
                               {i + 1}. {ex.title} ({ex.category})
@@ -962,7 +1122,7 @@ export default function Home() {
                               href={`/exercise/${ex.id}`}
                               className="text-emerald-400 hover:text-emerald-300 text-[11px]"
                             >
-                              Otwórz →
+                              Metodyka →
                             </Link>
                           </div>
                         ))}
@@ -974,7 +1134,7 @@ export default function Home() {
             </div>
           )
         ) : (
-          /* STANDARDOWA SIATKA ĆWICZEŃ */
+          /* STANDARDOWA SIATKA KART */
           loading ? (
             <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
               Ładowanie bazy...
@@ -1114,11 +1274,52 @@ export default function Home() {
         )}
       </div>
 
-      {/* PEŁNOEKRANOWY TRYB SALI / SESJA TRENINGOWA */}
+      {/* MODAL IMPORTU TRENINGU OD ZNAJOMEGO */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+            <h2 className="text-lg font-bold text-white mb-1">📥 Importuj Trening od Innego Zawodnika</h2>
+            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
+              Wklej kod treningu (ID), który udostępnił Ci Marek lub inny członek ekipy.
+            </p>
+
+            <form onSubmit={handleImportWorkout} className="space-y-4">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Kod treningu (UUID) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="np. 4f3b89a2-..."
+                  value={importCode}
+                  onChange={(e) => setImportCode(e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
+                >
+                  Zapisz u mnie
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TRYB SALI Z PRZYCISKIEM ZAKOŃCZENIA I PUBLIKACJI */}
       {activeSessionWorkout && (
         <div className="fixed inset-0 bg-neutral-950/95 backdrop-blur-md z-50 p-4 md:p-8 flex flex-col justify-between overflow-y-auto">
           <div className="max-w-3xl w-full mx-auto space-y-6">
-            {/* Top Bar sesji */}
             <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
               <div>
                 <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
@@ -1126,19 +1327,27 @@ export default function Home() {
                 </span>
                 <h2 className="text-2xl font-black text-white mt-1">{activeSessionWorkout.title}</h2>
               </div>
-              <button
-                onClick={() => {
-                  if (confirm("Zakończyć jednostkę treningową?")) {
-                    setActiveSessionWorkout(null);
-                  }
-                }}
-                className="bg-neutral-900 hover:bg-red-950/60 border border-neutral-800 hover:border-red-800 text-neutral-300 hover:text-red-300 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
-              >
-                Zakończ Trening ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePublishWorkoutToTimeline(activeSessionWorkout, formatTimerDigits(sessionElapsedTime))}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold px-3 py-2 rounded-xl text-xs transition-all cursor-pointer"
+                >
+                  Zakończ & Wrzuć na Timeline 🏆
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm("Zakończyć sesję bez publikacji?")) {
+                      setActiveSessionWorkout(null);
+                    }
+                  }}
+                  className="bg-neutral-900 border border-neutral-800 text-neutral-400 px-3 py-2 rounded-xl text-xs hover:text-white"
+                >
+                  Zamknij ✕
+                </button>
+              </div>
             </div>
 
-            {/* Pasek stopera i odpoczynku */}
+            {/* Pasek stopera i przerw */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-neutral-900/80 border border-neutral-800 p-5 rounded-2xl">
               <div>
                 <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
@@ -1178,28 +1387,6 @@ export default function Home() {
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Pasek postępu */}
-            <div>
-              <div className="flex justify-between text-xs text-neutral-400 mb-1">
-                <span>Postęp jednostki</span>
-                <span>
-                  {sessionCompletedIds.length} / {activeSessionWorkout.exercise_ids.length} wykonanych
-                </span>
-              </div>
-              <div className="w-full bg-neutral-900 h-2.5 rounded-full overflow-hidden border border-neutral-800">
-                <div
-                  className="bg-emerald-500 h-full transition-all duration-300"
-                  style={{
-                    width: `${
-                      activeSessionWorkout.exercise_ids.length > 0
-                        ? (sessionCompletedIds.length / activeSessionWorkout.exercise_ids.length) * 100
-                        : 0
-                    }%`,
-                  }}
-                />
               </div>
             </div>
 
@@ -1259,10 +1446,6 @@ export default function Home() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-white mb-1">🏋️ Stwórz Własny Trening</h2>
-            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Skomponuj jednostkę widoczną wyłącznie na Twoim koncie. Po zapisaniu możesz ją od razu odpalić w Trybie Sali.
-            </p>
-
             <form onSubmit={handleSaveStructuredWorkout} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -1270,7 +1453,7 @@ export default function Home() {
                   <input
                     type="text"
                     required
-                    placeholder="np. Przygotowanie bioder + Tricking"
+                    placeholder="np. Skoczność + Cheat 720"
                     value={workoutForm.title}
                     onChange={(e) => setWorkoutForm({ ...workoutForm, title: e.target.value })}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -1294,142 +1477,107 @@ export default function Home() {
                 <label className="text-xs text-neutral-400 block mb-1">Krótki opis jednostki</label>
                 <textarea
                   rows={2}
-                  placeholder="np. Skupienie na amortyzacji i dynamice wybicia..."
+                  placeholder="np. Cel: eksplozywne wybicie z jednej nogi..."
                   value={workoutForm.description}
                   onChange={(e) => setWorkoutForm({ ...workoutForm, description: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              {/* BLOK 1 */}
+              {/* 4 BLOKI METODYCZNE */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🔥</span> Krok 1: Rozgrzewka & Mobilność
-                  </span>
-                  <span className="text-[11px] text-neutral-500">
-                    Wybrano: {workoutForm.warmup_ids.length}
-                  </span>
-                </div>
-                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+                  🔥 Krok 1: Rozgrzewka & Mobilność ({workoutForm.warmup_ids.length})
+                </span>
+                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
                   {exercises
                     .filter((e) => e.category === "Rozciąganie" || e.subcategory?.includes("Mobilność"))
-                    .map((ex) => {
-                      const isSel = workoutForm.warmup_ids.includes(ex.id);
-                      return (
-                        <div
-                          key={ex.id}
-                          onClick={() => toggleSelectExercise("warmup_ids", ex.id)}
-                          className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                            isSel
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                              : "hover:bg-neutral-900 text-neutral-400"
-                          }`}
-                        >
-                          <span>{ex.title}</span>
-                          <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
-                        </div>
-                      );
-                    })}
+                    .map((ex) => (
+                      <div
+                        key={ex.id}
+                        onClick={() => toggleSelectExercise("warmup_ids", ex.id)}
+                        className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer ${
+                          workoutForm.warmup_ids.includes(ex.id)
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                            : "hover:bg-neutral-900 text-neutral-400"
+                        }`}
+                      >
+                        <span>{ex.title}</span>
+                        <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
 
-              {/* BLOK 2 */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>⚡</span> Krok 2: Wzmocnienie (Siła / Plyometria)
-                  </span>
-                  <span className="text-[11px] text-neutral-500">
-                    Wybrano: {workoutForm.strength_ids.length}
-                  </span>
-                </div>
-                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                <span className="text-xs font-bold text-sky-400 uppercase tracking-wider block">
+                  ⚡ Krok 2: Wzmocnienie Siła/Plyo ({workoutForm.strength_ids.length})
+                </span>
+                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
                   {exercises
                     .filter((e) => e.category === "Siła" || e.category === "Plyometria")
-                    .map((ex) => {
-                      const isSel = workoutForm.strength_ids.includes(ex.id);
-                      return (
-                        <div
-                          key={ex.id}
-                          onClick={() => toggleSelectExercise("strength_ids", ex.id)}
-                          className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                            isSel
-                              ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
-                              : "hover:bg-neutral-900 text-neutral-400"
-                          }`}
-                        >
-                          <span>{ex.title}</span>
-                          <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
-                        </div>
-                      );
-                    })}
+                    .map((ex) => (
+                      <div
+                        key={ex.id}
+                        onClick={() => toggleSelectExercise("strength_ids", ex.id)}
+                        className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer ${
+                          workoutForm.strength_ids.includes(ex.id)
+                            ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
+                            : "hover:bg-neutral-900 text-neutral-400"
+                        }`}
+                      >
+                        <span>{ex.title}</span>
+                        <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
 
-              {/* BLOK 3 */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🎯</span> Krok 3: Część Główna (Tricking)
-                  </span>
-                  <span className="text-[11px] text-neutral-500">
-                    Wybrano: {workoutForm.skill_ids.length}
-                  </span>
-                </div>
-                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
+                  🎯 Krok 3: Tricking & Skill ({workoutForm.skill_ids.length})
+                </span>
+                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
                   {exercises
                     .filter((e) => e.category === "Tricking")
-                    .map((ex) => {
-                      const isSel = workoutForm.skill_ids.includes(ex.id);
-                      return (
-                        <div
-                          key={ex.id}
-                          onClick={() => toggleSelectExercise("skill_ids", ex.id)}
-                          className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                            isSel
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                              : "hover:bg-neutral-900 text-neutral-400"
-                          }`}
-                        >
-                          <span>{ex.title}</span>
-                          <span className="text-[10px] text-neutral-500">{ex.difficulty}</span>
-                        </div>
-                      );
-                    })}
+                    .map((ex) => (
+                      <div
+                        key={ex.id}
+                        onClick={() => toggleSelectExercise("skill_ids", ex.id)}
+                        className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer ${
+                          workoutForm.skill_ids.includes(ex.id)
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                            : "hover:bg-neutral-900 text-neutral-400"
+                        }`}
+                      >
+                        <span>{ex.title}</span>
+                        <span className="text-[10px] text-neutral-500">{ex.difficulty}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
 
-              {/* BLOK 4 */}
               <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-teal-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🧘</span> Krok 4: Cool-down & Rozciąganie
-                  </span>
-                  <span className="text-[11px] text-neutral-500">
-                    Wybrano: {workoutForm.cooldown_ids.length}
-                  </span>
-                </div>
-                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                <span className="text-xs font-bold text-teal-400 uppercase tracking-wider block">
+                  🧘 Krok 4: Rozciąganie & Cool-down ({workoutForm.cooldown_ids.length})
+                </span>
+                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
                   {exercises
                     .filter((e) => e.category === "Rozciąganie")
-                    .map((ex) => {
-                      const isSel = workoutForm.cooldown_ids.includes(ex.id);
-                      return (
-                        <div
-                          key={ex.id}
-                          onClick={() => toggleSelectExercise("cooldown_ids", ex.id)}
-                          className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                            isSel
-                              ? "bg-teal-500/20 text-teal-300 border border-teal-500/40"
-                              : "hover:bg-neutral-900 text-neutral-400"
-                          }`}
-                        >
-                          <span>{ex.title}</span>
-                          <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
-                        </div>
-                      );
-                    })}
+                    .map((ex) => (
+                      <div
+                        key={ex.id}
+                        onClick={() => toggleSelectExercise("cooldown_ids", ex.id)}
+                        className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer ${
+                          workoutForm.cooldown_ids.includes(ex.id)
+                            ? "bg-teal-500/20 text-teal-300 border border-teal-500/40"
+                            : "hover:bg-neutral-900 text-neutral-400"
+                        }`}
+                      >
+                        <span>{ex.title}</span>
+                        <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
 
@@ -1437,15 +1585,15 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setIsWorkoutModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white"
                 >
                   Anuluj
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-5 py-2 rounded-xl text-sm transition-all"
                 >
-                  Zapisz Mój Trening
+                  Zapisz Trening
                 </button>
               </div>
             </form>
@@ -1453,15 +1601,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* MODAL PLANOWANIA ZAWODÓW (BEZ RĘCZNEGO WYBIERANIA FAZY) */}
+      {/* MODAL PLANOWANIA ZAWODÓW */}
       {isCompModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-lg font-bold text-white mb-1">🏆 Zaplanuj Zawody</h2>
-            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Wystarczy podać nazwę i datę startu. System automatycznie dopasuje fazę periodyzacji w zależności od liczby tygodni do imprezy.
-            </p>
-
             <form onSubmit={handleSaveCompetition} className="space-y-3">
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">Nazwa turnieju *</label>
@@ -1502,13 +1646,13 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setIsCompModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white cursor-pointer"
+                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
                 >
                   Anuluj
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all cursor-pointer"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
                 >
                   Zapisz
                 </button>
@@ -1525,10 +1669,6 @@ export default function Home() {
             <h2 className="text-lg font-bold text-white mb-1">
               {authMode === "login" ? "🔐 Zaloguj się" : "📝 Załóż konto zawodnika"}
             </h2>
-            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Wystarczy unikalny nick oraz hasło drużyny (lub PIN trenera).
-            </p>
-
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">Twój Nick / Imię *</label>
@@ -1642,7 +1782,7 @@ export default function Home() {
                     }}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                   >
-                    {MAIN_CATEGORIES.filter((c) => c !== "Własne treningi").map((cat) => (
+                    {[...EXERCISE_CATEGORIES, ...OTHER_CATEGORIES.filter((c) => c !== "Własne treningi")].map((cat) => (
                       <option key={cat} value={cat}>
                         {cat}
                       </option>

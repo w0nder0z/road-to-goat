@@ -9,8 +9,10 @@ interface ProgressItem {
   athlete_name: string;
   exercise_id: string;
   exercise_title: string;
-  video_url: string;
+  video_url?: string;
   notes: string;
+  post_type?: string;
+  workout_duration?: string;
   created_at: string;
 }
 
@@ -30,14 +32,11 @@ export default function TimelinePage() {
   const [comments, setComments] = useState<TimelineComment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Profil użytkownika
   const [currentUser, setCurrentUser] = useState<{ username: string; role: "athlete" | "coach" } | null>(null);
 
-  // Filtry
   const [filterAthlete, setFilterAthlete] = useState("Wszyscy");
   const [filterExercise, setFilterExercise] = useState("Wszystkie");
 
-  // Modal wideo
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [exercisesList, setExercisesList] = useState<{ id: string; title: string }[]>([]);
@@ -49,7 +48,6 @@ export default function TimelinePage() {
     notes: "",
   });
 
-  // Nowy komentarz
   const [newCommentText, setNewCommentText] = useState<Record<string, string>>({});
 
   const fetchData = async () => {
@@ -141,14 +139,15 @@ export default function TimelinePage() {
 
   const handleSaveSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.athlete_name || !form.video_url) return;
+    if (!form.athlete_name) return;
 
     const payload = {
       athlete_name: form.athlete_name,
       exercise_id: form.exercise_id,
       exercise_title: form.exercise_title,
-      video_url: formatVideoUrl(form.video_url),
+      video_url: form.video_url ? formatVideoUrl(form.video_url) : null,
       notes: form.notes,
+      post_type: "video",
     };
 
     if (editingId) {
@@ -180,7 +179,7 @@ export default function TimelinePage() {
   };
 
   const handleDeleteSubmission = async (id: string, athlete: string) => {
-    if (!confirm(`Czy na pewno usunąć nagranie zawodnika "${athlete}"?`)) return;
+    if (!confirm(`Czy na pewno usunąć wpis zawodnika "${athlete}"?`)) return;
     const { error } = await supabase.from("progress_submissions").delete().eq("id", id);
     if (!error) {
       setSubmissions((prev) => prev.filter((item) => item.id !== id));
@@ -218,7 +217,6 @@ export default function TimelinePage() {
     }
   };
 
-  // Listy do filtrów
   const uniqueAthletes = useMemo(() => {
     const names = Array.from(new Set(submissions.map((s) => s.athlete_name)));
     return ["Wszyscy", ...names];
@@ -229,7 +227,6 @@ export default function TimelinePage() {
     return ["Wszystkie", ...titles];
   }, [submissions]);
 
-  // Przefiltrowana lista wpisów
   const filteredSubmissions = useMemo(() => {
     return submissions.filter((s) => {
       if (filterAthlete !== "Wszyscy" && s.athlete_name !== filterAthlete) return false;
@@ -265,7 +262,6 @@ export default function TimelinePage() {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Pasek nawigacyjny */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800/80 pb-4 select-none">
           <Link
             href="/"
@@ -301,12 +297,11 @@ export default function TimelinePage() {
               }}
               className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-1.5 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer"
             >
-              + Dodaj nagranie
+              + Dodaj wpis / wideo
             </button>
           </div>
         </div>
 
-        {/* Nagłówek i statystyka */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
@@ -320,16 +315,16 @@ export default function TimelinePage() {
               )}
             </div>
             <p className="text-neutral-400 text-sm mt-1 leading-relaxed">
-              Analizy, ewolucje i próby z sali treningowej. Zostawiaj feedback i obserwuj rozwój ekipy.
+              Nagrania tricków, raporty z ukończonych treningów i bezpośrednie wskazówki trenerskie.
             </p>
           </div>
 
           <div className="bg-neutral-900/80 border border-neutral-800 px-4 py-2 rounded-2xl text-xs text-neutral-400 shrink-0">
-            Nagrania w bazie: <strong className="text-emerald-400 font-mono text-sm">{submissions.length}</strong>
+            Wpisy na feedzie: <strong className="text-emerald-400 font-mono text-sm">{submissions.length}</strong>
           </div>
         </div>
 
-        {/* Pasek filtrów */}
+        {/* Filtry */}
         <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-2xl p-3.5 flex flex-wrap items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-neutral-500 font-semibold uppercase tracking-wider">Zawodnik:</span>
@@ -347,7 +342,7 @@ export default function TimelinePage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-neutral-500 font-semibold uppercase tracking-wider">Ćwiczenie / Trick:</span>
+            <span className="text-neutral-500 font-semibold uppercase tracking-wider">Element / Trening:</span>
             <select
               value={filterExercise}
               onChange={(e) => setFilterExercise(e.target.value)}
@@ -374,24 +369,29 @@ export default function TimelinePage() {
           )}
         </div>
 
-        {/* Lista wpisów */}
+        {/* Feed wpisów */}
         {loading ? (
           <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
-            Ładowanie feedu nagrań...
+            Ładowanie wpisów...
           </div>
         ) : filteredSubmissions.length === 0 ? (
           <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
-            Brak nagrań spełniających wybrane kryteria.
+            Brak wpisów spełniających wybrane kryteria.
           </div>
         ) : (
           <div className="space-y-6">
             {filteredSubmissions.map((sub) => {
               const postComments = comments.filter((c) => c.submission_id === sub.id);
+              const isWorkoutPost = sub.post_type === "workout_summary";
 
               return (
                 <div
                   key={sub.id}
-                  className="bg-neutral-900/60 border border-neutral-800 rounded-3xl p-5 md:p-7 space-y-4 shadow-xl"
+                  className={`border rounded-3xl p-5 md:p-7 space-y-4 shadow-xl ${
+                    isWorkoutPost
+                      ? "bg-neutral-900/80 border-emerald-500/40"
+                      : "bg-neutral-900/60 border-neutral-800"
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -399,7 +399,14 @@ export default function TimelinePage() {
                         {sub.athlete_name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <h3 className="font-bold text-white text-base">{sub.athlete_name}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-white text-base">{sub.athlete_name}</h3>
+                          {isWorkoutPost && (
+                            <span className="text-[10px] font-bold text-amber-300 bg-amber-950/60 border border-amber-800 px-2 py-0.5 rounded-full">
+                              Ukończony Trening 🏆
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-neutral-500">
                           {new Date(sub.created_at).toLocaleDateString("pl-PL", {
                             day: "numeric",
@@ -412,41 +419,40 @@ export default function TimelinePage() {
 
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-neutral-800 text-emerald-400 border border-neutral-700">
-                        🎯 {sub.exercise_title}
+                        {sub.exercise_title}
                       </span>
 
                       {currentUser?.role === "coach" && (
-                        <div className="flex items-center gap-1.5 ml-2">
-                          <button
-                            onClick={() => {
-                              setEditingId(sub.id);
-                              setForm({
-                                athlete_name: sub.athlete_name,
-                                exercise_id: sub.exercise_id,
-                                exercise_title: sub.exercise_title,
-                                video_url: sub.video_url,
-                                notes: sub.notes || "",
-                              });
-                              setIsModalOpen(true);
-                            }}
-                            className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-2.5 py-1 rounded-lg border border-neutral-700 cursor-pointer"
-                            title="Edytuj wpis"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSubmission(sub.id, sub.athlete_name)}
-                            className="text-xs bg-red-950/40 hover:bg-red-900/60 text-red-400 px-2 py-1 rounded-lg border border-red-900/50 cursor-pointer"
-                            title="Usuń wpis"
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleDeleteSubmission(sub.id, sub.athlete_name)}
+                          className="text-xs bg-red-950/40 hover:bg-red-900/60 text-red-400 px-2 py-1 rounded-lg border border-red-900/50 cursor-pointer ml-1"
+                          title="Usuń wpis"
+                        >
+                          🗑️
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Odtwarzacz */}
+                  {/* KARTA UKOŃCZONEGO TRENINGU (BEZ WIDEO) */}
+                  {isWorkoutPost && (
+                    <div className="p-4 bg-neutral-950/80 border border-neutral-800 rounded-2xl flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">🏋️</span>
+                        <div>
+                          <h4 className="text-sm font-bold text-white">Sesja Treningowa Zrealizowana</h4>
+                          {sub.workout_duration && (
+                            <span className="text-xs text-emerald-400 font-mono">
+                              Czas jednostki: {sub.workout_duration}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-xs text-neutral-500 font-medium">100% planu</span>
+                    </div>
+                  )}
+
+                  {/* WIDEO JEŚLI DOSTĘPNE */}
                   {sub.video_url && (
                     <div className="space-y-1.5">
                       <div className="rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800">
@@ -475,11 +481,11 @@ export default function TimelinePage() {
 
                   {sub.notes && (
                     <p className="text-neutral-300 text-sm bg-neutral-950/60 p-4 rounded-2xl border border-neutral-800/80 leading-relaxed">
-                      💬 <strong className="text-neutral-200">Notatka:</strong> {sub.notes}
+                      💬 <strong className="text-neutral-200">Komentarz:</strong> {sub.notes}
                     </p>
                   )}
 
-                  {/* SEKCJA KOMENTARZY & FEEDBACKU */}
+                  {/* KOMENTARZE */}
                   <div className="border-t border-neutral-800/80 pt-4 space-y-3">
                     <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
                       <span>🗣️</span> Komentarze & Wskazówki trenerskie ({postComments.length})
@@ -531,7 +537,6 @@ export default function TimelinePage() {
                       </div>
                     )}
 
-                    {/* Formularz dodawania komentarza */}
                     <div className="flex gap-2 pt-1">
                       <input
                         type="text"
@@ -563,13 +568,11 @@ export default function TimelinePage() {
         )}
       </div>
 
-      {/* Modal dodawania i edycji nagrania */}
+      {/* Modal dodawania wideo */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-4">
-              {editingId ? "✏️ Edytuj wpis w Timeline" : "🎬 Wrzuć swoją próbę / wideo"}
-            </h2>
+            <h2 className="text-xl font-bold text-white mb-4">🎬 Wrzuć swoją próbę / wideo</h2>
 
             <form onSubmit={handleSaveSubmission} className="space-y-4">
               <div>
@@ -609,11 +612,10 @@ export default function TimelinePage() {
 
               <div>
                 <label className="text-xs text-neutral-400 block mb-1">
-                  Link wideo (YouTube, Shorts lub Dysk Google) *
+                  Link wideo (opcjonalny, np. YouTube lub Dysk Google)
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="YouTube lub link z Dysku Google"
                   value={form.video_url}
                   onChange={(e) => setForm({ ...form, video_url: e.target.value })}
@@ -625,7 +627,7 @@ export default function TimelinePage() {
                 <label className="text-xs text-neutral-400 block mb-1">Komentarz / Wrażenia z próby</label>
                 <textarea
                   rows={2}
-                  placeholder="Co poszło dobrze, nad czym pracujesz, amortyzacja..."
+                  placeholder="Co poszło dobrze, nad czym pracujesz..."
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
@@ -644,7 +646,7 @@ export default function TimelinePage() {
                   type="submit"
                   className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
                 >
-                  {editingId ? "Zapisz zmiany" : "Opublikuj w Timeline"}
+                  Opublikuj w Timeline
                 </button>
               </div>
             </form>
