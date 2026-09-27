@@ -9,6 +9,7 @@ interface ExerciseDetail {
   id: string;
   title: string;
   category: string;
+  subcategory?: string;
   difficulty: string;
   short_description: string;
   description: string;
@@ -23,15 +24,31 @@ interface MiniExercise {
   id: string;
   title: string;
   difficulty: string;
+  category: string;
 }
 
 interface ProgressSubmission {
   id: string;
   athlete_name: string;
-  video_url: string;
+  video_url?: string;
   notes: string;
   created_at: string;
 }
+
+const TRICKING_LEVELS = [
+  "Lvl 1: Fundamenty",
+  "Lvl 2: Baza",
+  "Lvl 3: Pojedyncze śruby",
+  "Lvl 4: Zaawansowane",
+  "Lvl 5: Master",
+  "Lvl 6: Elite",
+];
+
+const STANDARD_DIFFICULTIES = [
+  "Fundament / Wdrożenie",
+  "Średniozaawansowany",
+  "Zaawansowany / Wyczyn",
+];
 
 export default function ExerciseDetailPage() {
   const params = useParams();
@@ -41,15 +58,33 @@ export default function ExerciseDetailPage() {
   const [prerequisites, setPrerequisites] = useState<MiniExercise[]>([]);
   const [unlockedTricks, setUnlockedTricks] = useState<MiniExercise[]>([]);
   const [submissions, setSubmissions] = useState<ProgressSubmission[]>([]);
+  const [allExercisesList, setAllExercisesList] = useState<MiniExercise[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Indeks aktualnego źródła w karuzeli
+  // Sesja użytkownika / uprawnienia trenera
+  const [currentUser, setCurrentUser] = useState<{ username: string; role: "athlete" | "coach" } | null>(null);
+
+  // Karuzela wideo
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [form, setForm] = useState({ athlete_name: "", video_url: "", notes: "" });
+  // Modal zgłoszenia wideo zawodnika
+  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
+  const [submissionForm, setSubmissionForm] = useState({ athlete_name: "", video_url: "", notes: "" });
 
-  // Konwersja na format iframe
+  // Modal edycji tricku dla Admina / Trenera
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    category: "Tricking",
+    subcategory: "",
+    difficulty: "Lvl 1: Fundamenty",
+    short_description: "",
+    description: "",
+    sources: [""] as string[],
+    prerequisite_ids: [] as string[],
+  });
+  const [prereqSearch, setPrereqSearch] = useState("");
+
   const parseVideoEmbed = (url: string) => {
     if (!url) return "";
     if (url.includes("drive.google.com/file/d/")) {
@@ -75,7 +110,6 @@ export default function ExerciseDetailPage() {
     return url;
   };
 
-  // Sprawdzenie, czy serwis zezwala na osadzanie w ramce iframe
   const isEmbeddable = (url: string) => {
     if (!url) return false;
     return (
@@ -90,6 +124,7 @@ export default function ExerciseDetailPage() {
     if (!id) return;
     setLoading(true);
 
+    // 1. Bieżące ćwiczenie
     const { data: currentEx, error } = await supabase
       .from("exercises")
       .select("*")
@@ -103,22 +138,54 @@ export default function ExerciseDetailPage() {
 
     setExercise(currentEx);
 
+    // Formularz edycji startowo
+    const initialSources = currentEx.sources && currentEx.sources.length > 0
+      ? currentEx.sources
+      : currentEx.video_url
+      ? [currentEx.video_url]
+      : [""];
+
+    setEditForm({
+      title: currentEx.title,
+      category: currentEx.category,
+      subcategory: currentEx.subcategory || "",
+      difficulty: currentEx.difficulty,
+      short_description: currentEx.short_description || "",
+      description: currentEx.description || "",
+      sources: initialSources,
+      prerequisite_ids: currentEx.prerequisite_ids || [],
+    });
+
+    // 2. Cała lista do wyboru w drzewku
+    const { data: allList } = await supabase
+      .from("exercises")
+      .select("id, title, difficulty, category")
+      .order("title", { ascending: true });
+
+    if (allList) setAllExercisesList(allList);
+
+    // 3. Wymagane fundamenty (Prerequisites)
     if (currentEx.prerequisite_ids && currentEx.prerequisite_ids.length > 0) {
       const { data: prereqData } = await supabase
         .from("exercises")
-        .select("id, title, difficulty")
+        .select("id, title, difficulty, category")
         .in("id", currentEx.prerequisite_ids);
 
       if (prereqData) setPrerequisites(prereqData);
+    } else {
+      setPrerequisites([]);
     }
 
+    // 4. Co odblokowuje (Unlocked Tricks)
     const { data: unlockedData } = await supabase
       .from("exercises")
-      .select("id, title, difficulty")
+      .select("id, title, difficulty, category")
       .contains("prerequisite_ids", [id]);
 
     if (unlockedData) setUnlockedTricks(unlockedData);
+    else setUnlockedTricks([]);
 
+    // 5. Próby wideo zawodników
     const { data: subsData } = await supabase
       .from("progress_submissions")
       .select("id, athlete_name, video_url, notes, created_at")
@@ -131,34 +198,101 @@ export default function ExerciseDetailPage() {
   };
 
   useEffect(() => {
+    // Weryfikacja zalogowanego profilu
+    const savedUser = localStorage.getItem("goat_athlete_profile");
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser);
+        setCurrentUser(parsed);
+        if (parsed.username) {
+          setSubmissionForm((p) => ({ ...p, athlete_name: parsed.username }));
+        }
+      } catch {
+        setCurrentUser(null);
+      }
+    }
+
     fetchDetailAndTree();
   }, [id]);
 
   const handleAddSubmission = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.athlete_name || !form.video_url || !exercise) return;
+    if (!submissionForm.athlete_name || !exercise) return;
 
     const payload = {
-      athlete_name: form.athlete_name,
+      athlete_name: submissionForm.athlete_name,
       exercise_id: exercise.id,
       exercise_title: exercise.title,
-      video_url: parseVideoEmbed(form.video_url),
-      notes: form.notes,
+      video_url: submissionForm.video_url ? parseVideoEmbed(submissionForm.video_url) : null,
+      notes: submissionForm.notes,
+      post_type: "video",
     };
 
     const { data, error } = await supabase.from("progress_submissions").insert([payload]).select();
 
     if (!error && data) {
       setSubmissions((prev) => [data[0], ...prev]);
-      setIsModalOpen(false);
-      setForm({ athlete_name: "", video_url: "", notes: "" });
+      setIsSubmissionModalOpen(false);
+      setSubmissionForm((p) => ({ ...p, video_url: "", notes: "" }));
+      alert("Twoja próba została wrzucona na Timeline! 🎬");
+    } else {
+      alert("Błąd: " + error?.message);
     }
+  };
+
+  // Zapis zmian w edycji ćwiczenia przez Trenera
+  const handleSaveExerciseEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm.title || !exercise) return;
+
+    const formattedSources = editForm.sources
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+      .map(parseVideoEmbed);
+
+    const payload = {
+      title: editForm.title,
+      category: editForm.category,
+      subcategory: editForm.subcategory,
+      difficulty: editForm.difficulty,
+      short_description: editForm.short_description,
+      description: editForm.description,
+      sources: formattedSources,
+      video_url: formattedSources[0] || "",
+      prerequisite_ids: editForm.prerequisite_ids,
+    };
+
+    const { data, error } = await supabase
+      .from("exercises")
+      .update(payload)
+      .eq("id", exercise.id)
+      .select();
+
+    if (!error && data) {
+      setIsEditModalOpen(false);
+      await fetchDetailAndTree();
+      alert("Zaktualizowano pomyślnie metodykę i powiązania w drzewku!");
+    } else {
+      alert("Błąd zapisu: " + error?.message);
+    }
+  };
+
+  const togglePrereqId = (selectedId: string) => {
+    setEditForm((prev) => {
+      const exists = prev.prerequisite_ids.includes(selectedId);
+      return {
+        ...prev,
+        prerequisite_ids: exists
+          ? prev.prerequisite_ids.filter((x) => x !== selectedId)
+          : [...prev.prerequisite_ids, selectedId],
+      };
+    });
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-400 flex items-center justify-center text-sm animate-pulse">
-        Budowanie podglądu...
+        Budowanie podglądu metodycznego...
       </div>
     );
   }
@@ -185,6 +319,12 @@ export default function ExerciseDetailPage() {
   const embedCurrentUrl = parseVideoEmbed(rawCurrentUrl);
   const canEmbed = isEmbeddable(rawCurrentUrl);
 
+  const filteredPrereqOptions = allExercisesList.filter(
+    (item) =>
+      item.id !== exercise.id &&
+      item.title.toLowerCase().includes(prereqSearch.toLowerCase())
+  );
+
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -197,19 +337,38 @@ export default function ExerciseDetailPage() {
             <span>Wróć do bazy ROAD TO GOAT</span>
           </Link>
 
-          <Link href="/timeline" className="text-xs text-neutral-400 hover:text-emerald-400 transition-colors">
-            🎬 Globalny Timeline →
-          </Link>
+          <div className="flex items-center gap-3">
+            {currentUser?.role === "coach" && (
+              <button
+                onClick={() => setIsEditModalOpen(true)}
+                className="bg-neutral-800 hover:bg-neutral-700 text-emerald-400 border border-emerald-500/40 text-xs px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>✏️ Edytuj metodykę & drzewko</span>
+              </button>
+            )}
+
+            <Link href="/timeline" className="text-xs text-neutral-400 hover:text-emerald-400 transition-colors">
+              🎬 Timeline →
+            </Link>
+          </div>
         </div>
 
         <div className="bg-neutral-900/60 border border-neutral-800 rounded-3xl p-6 md:p-8">
-          <div className="flex flex-wrap items-center gap-3 mb-4 select-none">
-            <span className="text-xs font-semibold px-3 py-1 rounded-lg bg-neutral-800 text-emerald-400 border border-neutral-700">
-              {exercise.category}
-            </span>
-            <span className="text-xs text-neutral-400 bg-neutral-950 px-3 py-1 rounded-lg border border-neutral-800">
-              {exercise.difficulty}
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 select-none">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold px-3 py-1 rounded-lg bg-neutral-800 text-emerald-400 border border-neutral-700">
+                {exercise.subcategory || exercise.category}
+              </span>
+              <span className="text-xs text-neutral-400 bg-neutral-950 px-3 py-1 rounded-lg border border-neutral-800">
+                {exercise.difficulty}
+              </span>
+            </div>
+
+            {currentUser?.role === "coach" && (
+              <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-md">
+                Tryb Trenera Aktywny
+              </span>
+            )}
           </div>
 
           <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-3">
@@ -222,7 +381,7 @@ export default function ExerciseDetailPage() {
             </p>
           )}
 
-          {/* ODTWARZACZ WIDEO ZE STRZAŁKAMI I AWARYJNYM PRZYCISKIEM */}
+          {/* ODTWARZACZ WIDEO ZE STRZAŁKAMI I AWARYJNYM LINKIEM */}
           {allSources.length > 0 ? (
             <div className="mb-6 space-y-3">
               <div className="relative rounded-2xl overflow-hidden aspect-video bg-neutral-950 border border-neutral-800 shadow-2xl group">
@@ -235,14 +394,13 @@ export default function ExerciseDetailPage() {
                     allowFullScreen
                   />
                 ) : (
-                  /* KARTA GDY STRONA BLOKUJE IFRAME (NP. LOOPKICKS) */
                   <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-neutral-900/90">
                     <span className="text-4xl mb-3">🔗</span>
                     <h3 className="text-white font-bold text-base mb-1">
                       Materiał ze strony zewnętrznej
                     </h3>
                     <p className="text-xs text-neutral-400 max-w-sm mb-4 leading-relaxed">
-                      Ta witryna blokuje osadzanie w ramkach. Możesz otworzyć pełny poradnik i materiał bezpośrednio pod źródłowym adresem.
+                      Ta witryna blokuje osadzanie w ramkach. Możesz otworzyć pełny poradnik bezpośrednio pod adresem źródłowym.
                     </p>
                     <a
                       href={rawCurrentUrl}
@@ -256,7 +414,6 @@ export default function ExerciseDetailPage() {
                   </div>
                 )}
 
-                {/* Strzałki zmiany źródła */}
                 {allSources.length > 1 && (
                   <>
                     <button
@@ -281,7 +438,6 @@ export default function ExerciseDetailPage() {
                 )}
               </div>
 
-              {/* Pasek nawigacyjny źródeł + Bezpośredni link awaryjny */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-neutral-400 px-1 select-none">
                 <div className="flex items-center gap-2">
                   {allSources.length > 1 ? (
@@ -302,18 +458,17 @@ export default function ExerciseDetailPage() {
                       </div>
                     </>
                   ) : (
-                    <span>Materiał wideo powiązany z ćwiczeniem</span>
+                    <span>Materiał metodyczny powiązany z ćwiczeniem</span>
                   )}
                 </div>
 
-                {/* Bezpośredni link ratunkowy do pliku/strony */}
                 <a
                   href={rawCurrentUrl.replace("/preview", "/view")}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 self-start sm:self-auto"
+                  className="text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1"
                 >
-                  <span>🔗 Problemy z odtwarzaniem? Otwórz bezpośrednio w nowej karcie</span>
+                  <span>🔗 Otwórz w nowej karcie</span>
                   <span>↗</span>
                 </a>
               </div>
@@ -334,56 +489,28 @@ export default function ExerciseDetailPage() {
               </div>
             </div>
           )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-neutral-800/60">
-            <div>
-              <p className="text-xs text-neutral-400 mb-2 font-medium">Kluczowe stawy:</p>
-              <div className="flex flex-wrap gap-1.5 select-none">
-                {exercise.joints && exercise.joints.length > 0 ? (
-                  exercise.joints.map((joint) => (
-                    <span
-                      key={joint}
-                      className="text-xs bg-neutral-800 text-neutral-200 px-2.5 py-1 rounded-lg border border-neutral-700"
-                    >
-                      🦴 {joint}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-neutral-500">Brak przypisanych stawów</span>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs text-neutral-400 mb-2 font-medium">Główne mięśnie i ścięgna:</p>
-              <div className="flex flex-wrap gap-1.5 select-none">
-                {exercise.muscles && exercise.muscles.length > 0 ? (
-                  exercise.muscles.map((muscle) => (
-                    <span
-                      key={muscle}
-                      className="text-xs bg-emerald-950/40 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-900/50"
-                    >
-                      ⚡ {muscle}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-neutral-500">Brak przypisanych mięśni</span>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Drzewko progresji */}
+        {/* DRZEWKO PROGRESJI (SKILL TREE) */}
         <div className="bg-neutral-900/50 border border-neutral-800/90 rounded-3xl p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <span>🌳</span> Drzewko Progresji (Skill Tree)
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <span>🌳</span> Drzewko Progresji (Skill Tree)
+            </h2>
+            {currentUser?.role === "coach" && (
+              <button
+                onClick={() => setIsEditModalOpen(true)}
+                className="text-xs text-emerald-400 hover:underline cursor-pointer"
+              >
+                + Zmień powiązania w drzewku
+              </button>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-neutral-950/60 border border-neutral-800/80 rounded-2xl p-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300 mb-3">
-                Wymagane fundamenty (Prerequisites)
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-1.5">
+                <span>🔒</span> Wymagane fundamenty ({prerequisites.length})
               </h3>
               {prerequisites.length === 0 ? (
                 <p className="text-xs text-neutral-500 italic py-2">
@@ -408,8 +535,8 @@ export default function ExerciseDetailPage() {
             </div>
 
             <div className="bg-neutral-950/60 border border-neutral-800/80 rounded-2xl p-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300 mb-3">
-                Co odblokowuje (Next Steps)
+              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-1.5">
+                <span>🔓</span> Co odblokowuje ({unlockedTricks.length})
               </h3>
               {unlockedTricks.length === 0 ? (
                 <p className="text-xs text-neutral-500 italic py-2">
@@ -447,7 +574,7 @@ export default function ExerciseDetailPage() {
               </p>
             </div>
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => setIsSubmissionModalOpen(true)}
               className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs px-4 py-2 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
             >
               + Dodaj swoje wideo
@@ -507,8 +634,169 @@ export default function ExerciseDetailPage() {
         </div>
       </div>
 
-      {/* Modal dodawania próby */}
-      {isModalOpen && (
+      {/* MODAL EDYCJI METODYKI I DRZEWKA (DLA TRENERA) */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto space-y-4">
+            <h2 className="text-xl font-bold text-white mb-1">
+              ✏️ Edytuj Element & Drzewko Progresji
+            </h2>
+
+            <form onSubmit={handleSaveExerciseEdit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Nazwa elementu *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Poziom zaawansowania</label>
+                  <select
+                    value={editForm.difficulty}
+                    onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {(editForm.category === "Tricking" ? TRICKING_LEVELS : STANDARD_DIFFICULTIES).map((lvl) => (
+                      <option key={lvl} value={lvl}>
+                        {lvl}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Krótki opis (na kafelek) *</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.short_description}
+                  onChange={(e) => setEditForm({ ...editForm, short_description: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">Szczegółowa metodyka & technika</label>
+                <textarea
+                  rows={4}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* SEKCJA DRZEWKA: WYBÓR FUNDAMENTÓW (PREREQUISITES) */}
+              <div className="border border-neutral-800 bg-neutral-950/70 p-4 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🌳</span> Wymagane fundamenty w Drzewku ({editForm.prerequisite_ids.length})
+                  </span>
+                  <span className="text-[11px] text-neutral-500">Kliknij, aby zaznaczyć/odznaczyć</span>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Filtruj tricki do powiązania..."
+                  value={prereqSearch}
+                  onChange={(e) => setPrereqSearch(e.target.value)}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500"
+                />
+
+                <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                  {filteredPrereqOptions.map((item) => {
+                    const isSelected = editForm.prerequisite_ids.includes(item.id);
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => togglePrereqId(item.id)}
+                        className={`p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                          isSelected
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                            : "hover:bg-neutral-900 text-neutral-400 border border-transparent"
+                        }`}
+                      >
+                        <span className="font-semibold">{item.title}</span>
+                        <span className="text-[10px] text-neutral-500">{item.difficulty}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ŹRÓDŁA WIDEO */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-emerald-400 font-medium">
+                    🔗 Źródła wideo (YouTube, Shorts, Dysk Google)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setEditForm((p) => ({ ...p, sources: [...p.sources, ""] }))}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
+                  >
+                    + Dodaj kolejne wideo
+                  </button>
+                </div>
+
+                {editForm.sources.map((s, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder={`Link wideo #${idx + 1}`}
+                      value={s}
+                      onChange={(e) => {
+                        const newS = [...editForm.sources];
+                        newS[idx] = e.target.value;
+                        setEditForm({ ...editForm, sources: newS });
+                      }}
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                    {editForm.sources.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditForm((p) => ({
+                            ...p,
+                            sources: p.sources.filter((_, i) => i !== idx),
+                          }))
+                        }
+                        className="text-neutral-500 hover:text-red-400 text-sm px-2 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
+                >
+                  Zapisz zmiany w bazie
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL WRZUCANIA PRÓBY PRZEZ ZAWODNIKA */}
+      {isSubmissionModalOpen && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-1">Wrzuć próbę: {exercise.title}</h2>
@@ -518,30 +806,29 @@ export default function ExerciseDetailPage() {
                 <input
                   type="text"
                   required
-                  value={form.athlete_name}
-                  onChange={(e) => setForm({ ...form, athlete_name: e.target.value })}
+                  value={submissionForm.athlete_name}
+                  onChange={(e) => setSubmissionForm({ ...submissionForm, athlete_name: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Link do wideo *</label>
+                <label className="text-xs text-neutral-400 block mb-1">Link do wideo (YouTube, Shorts lub Dysk)</label>
                 <input
                   type="text"
-                  required
-                  placeholder="YouTube, Shorts lub link z Dysku Google"
-                  value={form.video_url}
-                  onChange={(e) => setForm({ ...form, video_url: e.target.value })}
+                  placeholder="https://..."
+                  value={submissionForm.video_url}
+                  onChange={(e) => setSubmissionForm({ ...submissionForm, video_url: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Komentarz</label>
+                <label className="text-xs text-neutral-400 block mb-1">Komentarz / Wrażenia</label>
                 <textarea
                   rows={2}
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  value={submissionForm.notes}
+                  onChange={(e) => setSubmissionForm({ ...submissionForm, notes: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -549,7 +836,7 @@ export default function ExerciseDetailPage() {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsSubmissionModalOpen(false)}
                   className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
                 >
                   Anuluj

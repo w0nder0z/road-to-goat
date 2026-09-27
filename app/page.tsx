@@ -110,7 +110,6 @@ const STANDARD_DIFFICULTIES = [
   "Zaawansowany / Wyczyn",
 ];
 
-// Definicja kroków tutoriala ze wskazaniem selektora elementu docelowego
 const TOUR_STEPS = [
   {
     targetId: "tour-header",
@@ -171,15 +170,11 @@ export default function Home() {
   const exerciseDropdownRef = useRef<HTMLDivElement>(null);
   const workoutDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Samouczek Spotlight Guided Tour
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
 
-  // Opanowane skille zawodnika (ID-ki ćwiczeń)
   const [masteredSkillIds, setMasteredSkillIds] = useState<string[]>([]);
-
-  // Rekomendacja treningowa asystenta
   const [showRecommendationModal, setShowRecommendationModal] = useState(false);
 
   const [heroImages, setHeroImages] = useState<string[]>([
@@ -201,7 +196,7 @@ export default function Home() {
   const [authTeamCode, setAuthTeamCode] = useState("");
   const [authIsCoach, setAuthIsCoach] = useState(false);
 
-  // Zarządzanie Zawodami
+  // Zawody
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [isCompManagerOpen, setIsCompManagerOpen] = useState(false);
   const [editingCompId, setEditingCompId] = useState<string | null>(null);
@@ -243,6 +238,7 @@ export default function Home() {
     sources: [""] as string[],
     prerequisite_ids: [] as string[],
   });
+  const [formPrereqSearch, setFormPrereqSearch] = useState("");
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -374,7 +370,6 @@ export default function Home() {
     fetchData();
   }, []);
 
-  // Obsługa pozycjonowania dymka Spotlight Tour
   const startGuidedTour = () => {
     setTutorialStep(0);
     setIsTutorialOpen(true);
@@ -416,7 +411,6 @@ export default function Home() {
     }
   };
 
-  // Toggle Opanowania Elementu
   const toggleMasteredSkill = async (exerciseId: string) => {
     if (!currentUser) {
       alert("Zaloguj się, aby oznaczać opanowane tricki i śledzić swój postęp!");
@@ -446,23 +440,17 @@ export default function Home() {
     }
   };
 
-  // Asystent Treningowy: Wyznaczenie kolejnego logicznego tricku
   const recommendedSkill = useMemo(() => {
     if (!currentUser || exercises.length === 0) return null;
 
-    // Szukamy tricków z Tricking, których zawodnik NIE potrafi, ale ma spełnione wszystkie prerequisites
     const candidate = exercises.find((ex) => {
       if (ex.category !== "Tricking") return false;
       if (masteredSkillIds.includes(ex.id)) return false;
-
-      // Jeśli nie ma wymagań -> kandydat bazowy
       if (!ex.prerequisite_ids || ex.prerequisite_ids.length === 0) return true;
 
-      // Sprawdzamy czy potrafi wszystkie wymagania
-      const hasAllPrereqs = ex.prerequisite_ids.every((prereqId) =>
+      return ex.prerequisite_ids.every((prereqId) =>
         masteredSkillIds.includes(prereqId)
       );
-      return hasAllPrereqs;
     });
 
     return candidate || null;
@@ -667,7 +655,7 @@ export default function Home() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
-      // Ignoruj
+      // Ignoruj błąd
     }
     setCurrentUser(null);
     setMasteredSkillIds([]);
@@ -819,7 +807,6 @@ export default function Home() {
     });
   };
 
-  // Zarządzanie zawodami: Dodawanie / Edycja / Usuwanie
   const handleSaveCompetition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!compForm.name || !compForm.date) return;
@@ -863,7 +850,6 @@ export default function Home() {
     }
   };
 
-  // Wyznaczanie TYLKO najbliższych nadchodzących zawodów
   const nextCompetition = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
     const upcoming = competitions.filter((c) => c.date >= today);
@@ -941,13 +927,11 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
-      {/* SPOTLIGHT GUIDED TOUR OVERLAY */}
+      {/* SPOTLIGHT GUIDED TOUR */}
       {isTutorialOpen && (
         <div className="fixed inset-0 z-50 pointer-events-auto">
-          {/* Ciemne tło z wycięciem podświetlanego elementu */}
           <div className="absolute inset-0 bg-black/75 transition-all duration-300" />
 
-          {/* Ramka podświetlająca element docelowy */}
           {targetRect && (
             <div
               className="absolute border-2 border-emerald-400 rounded-2xl shadow-[0_0_30px_rgba(52,211,153,0.4)] pointer-events-none transition-all duration-300"
@@ -960,21 +944,14 @@ export default function Home() {
             />
           )}
 
-          {/* Dymek z opisem */}
           <div
             className="fixed z-50 bg-neutral-900 border border-emerald-500/60 rounded-3xl p-6 shadow-2xl max-w-sm w-[90vw] space-y-4 animate-in fade-in zoom-in-95 duration-200"
             style={{
               top: targetRect
-                ? Math.min(
-                    window.innerHeight - 240,
-                    Math.max(20, targetRect.bottom + 16)
-                  )
+                ? Math.min(window.innerHeight - 240, Math.max(20, targetRect.bottom + 16))
                 : "50%",
               left: targetRect
-                ? Math.min(
-                    window.innerWidth - 340,
-                    Math.max(20, targetRect.left)
-                  )
+                ? Math.min(window.innerWidth - 340, Math.max(20, targetRect.left))
                 : "50%",
               transform: !targetRect ? "translate(-50%, -50%)" : "none",
             }}
@@ -1122,7 +1099,6 @@ export default function Home() {
                   Nie wiesz, co dzisiaj trenować? Skorzystaj z inteligentnej rekomendacji kolejnego kroku w drzewku!
                 </p>
 
-                {/* SZYBKI ASYSTENT: REKOMENDACJA NASTĘPNEGO TRICKU */}
                 {recommendedSkill && (
                   <div className="mt-3 inline-flex items-center gap-3 bg-emerald-950/50 border border-emerald-500/40 px-4 py-2 rounded-2xl backdrop-blur-md">
                     <span className="text-xs text-neutral-300">
@@ -1138,7 +1114,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* KAFELEK: PRZYPOMNIENIE AKTUALNEGO CELU NA ZAWODY (Z FAZĄ TYLKO DLA NAJBLIŻSZYCH) */}
               <div
                 id="tour-competition-widget"
                 onClick={() => setIsCompManagerOpen(true)}
@@ -1186,7 +1161,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* PRZYCISKI AKCJI Z ROZWIJANYM MENU TRENINGÓW */}
           <div className="relative z-40 flex flex-wrap items-center justify-between gap-3 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1273,10 +1247,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PASEK KATEGORII: BAZA -> MUZYKA -> DIETA (+ WŁASNE TRENINGI GDY ZALOGOWANY) */}
+      {/* PASEK KATEGORII */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
         <div className="flex flex-wrap items-center gap-2.5 pb-2 select-none border-b border-neutral-900 pb-3">
-          {/* ROZWIJANA BAZA ĆWICZEŃ */}
           <div className="relative" ref={exerciseDropdownRef} id="tour-exercise-base">
             <button
               onClick={() => setIsExerciseDropdownOpen(!isExerciseDropdownOpen)}
@@ -1532,7 +1505,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* STANDARDOWA SIATKA ĆWICZEŃ Z PRZYCISKIEM "UMIEM TO" */}
+        {/* STANDARDOWA SIATKA ĆWICZEŃ */}
         {activeCategory !== "Własne treningi" && (
           loading ? (
             <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
@@ -1584,17 +1557,12 @@ export default function Home() {
                       <div className="flex items-start justify-between gap-2">
                         <h3
                           className={`text-lg font-bold transition-colors ${
-                            isMastered
-                              ? "text-emerald-300"
-                              : isExpanded
-                              ? "text-white"
-                              : "text-white"
+                            isMastered ? "text-emerald-300" : "text-white"
                           }`}
                         >
                           {item.title}
                         </h3>
 
-                        {/* PRZYCISK OZNACZANIA "UMIEM TO" DLA ZALOGOWANEGO */}
                         {currentUser && item.category !== "Muzyka" && (
                           <button
                             type="button"
@@ -1701,7 +1669,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* PANEL ZARZĄDZANIA ZAWODAMI (LISTA, EDYCJA, USUWANIE + FAZA DLA NAJBLIŻSZYCH) */}
+      {/* PANEL ZARZĄDZANIA ZAWODAMI */}
       {isCompManagerOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto space-y-6">
@@ -1726,7 +1694,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Formularz dodawania / edycji */}
             {currentUser?.role === "coach" ? (
               <form onSubmit={handleSaveCompetition} className="p-4 bg-neutral-950/80 border border-neutral-800 rounded-2xl space-y-3">
                 <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
@@ -1779,7 +1746,6 @@ export default function Home() {
               </form>
             ) : null}
 
-            {/* Lista wszystkich zawodów */}
             <div className="space-y-3">
               <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
                 Zaplanowane starty w sezonie ({competitions.length}):
@@ -1825,7 +1791,6 @@ export default function Home() {
                           {comp.location && <span>📍 {comp.location}</span>}
                         </div>
 
-                        {/* FAZA WYŚWIETLA SIĘ WYŁĄCZNIE DLA NAJBLIŻSZYCH ZAWODÓW */}
                         {isNext && (
                           <div className="pt-1">
                             <span className="text-emerald-300 font-bold text-xs bg-emerald-950 border border-emerald-800/80 px-2.5 py-0.5 rounded-md inline-block">
@@ -1867,7 +1832,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* MODAL REKOMENDACJI ASYSTENTA TRENINGOWEGO */}
+      {/* MODAL REKOMENDACJI ASYSTENTA */}
       {showRecommendationModal && recommendedSkill && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4">
@@ -1897,6 +1862,241 @@ export default function Home() {
                 Przejdź do pełnej metodyki i wideo →
               </Link>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DODAWANIA POZYCJI (Z DRZEWKIEM PROGRESJI) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-white mb-4">
+              {editingExerciseId
+                ? "✏️ Edytuj pozycję"
+                : formData.category === "Muzyka"
+                ? "🎵 Dodaj Playlistę Muzyczną"
+                : "+ Dodaj nowy element"}
+            </h2>
+
+            <form onSubmit={handleSaveExercise} className="space-y-4">
+              <div>
+                <label className="text-xs text-neutral-400 block mb-1">
+                  {formData.category === "Muzyka" ? "Nazwa Playlisty *" : "Nazwa *"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={formData.category === "Muzyka" ? "np. Battle Hype Beats 2026" : "np. Corkscrew, B-twist"}
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Kategoria</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      setFormData({
+                        ...formData,
+                        category: newCat,
+                        subcategory: SUBCATEGORIES_CONFIG[newCat][1] || "",
+                        difficulty: newCat === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
+                      });
+                    }}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {[...EXERCISE_CATEGORIES, "Muzyka", "Dieta"].map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">
+                    {formData.category === "Muzyka" ? "Gatunek muzyki" : "Podkategoria"}
+                  </label>
+                  <select
+                    value={formData.subcategory}
+                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {SUBCATEGORIES_CONFIG[formData.category]
+                      ?.filter((s) => !s.startsWith("Wszystkie"))
+                      .map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              {formData.category !== "Muzyka" && (
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Poziom</label>
+                  <select
+                    value={formData.difficulty}
+                    onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    {(formData.category === "Tricking"
+                      ? TRICKING_LEVELS.filter((l) => !l.startsWith("Wszystkie"))
+                      : STANDARD_DIFFICULTIES
+                    ).map((lvl) => (
+                      <option key={lvl} value={lvl}>
+                        {lvl}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs text-emerald-400 block mb-1 font-medium">
+                  {formData.category === "Muzyka" ? "Krótki opis / Klimat playlisty *" : "Krótki opis *"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={formData.category === "Muzyka" ? "np. Szybki beat, idealny pod walki" : "Krótki opis..."}
+                  value={formData.short_description}
+                  onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {formData.category !== "Muzyka" && (
+                <div>
+                  <label className="text-xs text-neutral-400 block mb-1">Wskazówki metodyczne</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Technika, błędy..."
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              )}
+
+              {/* SEKCJA DRZEWKA PROGRESJI W FORMULARZU GŁÓWNYM */}
+              {formData.category !== "Muzyka" && (
+                <div className="border border-neutral-800 bg-neutral-950/70 p-3.5 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>🌳</span> Wymagane fundamenty ({formData.prerequisite_ids.length})
+                    </span>
+                    <span className="text-[10px] text-neutral-500">Wybierz z bazy</span>
+                  </div>
+
+                  <input
+                    type="text"
+                    placeholder="Szukaj elementu bazowego..."
+                    value={formPrereqSearch}
+                    onChange={(e) => setFormPrereqSearch(e.target.value)}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500"
+                  />
+
+                  <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                    {exercises
+                      .filter(
+                        (ex) =>
+                          ex.id !== editingExerciseId &&
+                          ex.title.toLowerCase().includes(formPrereqSearch.toLowerCase())
+                      )
+                      .map((ex) => {
+                        const isSelected = formData.prerequisite_ids.includes(ex.id);
+                        return (
+                          <div
+                            key={ex.id}
+                            onClick={() => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                prerequisite_ids: isSelected
+                                  ? prev.prerequisite_ids.filter((x) => x !== ex.id)
+                                  : [...prev.prerequisite_ids, ex.id],
+                              }));
+                            }}
+                            className={`p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                              isSelected
+                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                : "hover:bg-neutral-900 text-neutral-400 border border-transparent"
+                            }`}
+                          >
+                            <span className="font-semibold">{ex.title}</span>
+                            <span className="text-[10px] text-neutral-500">{ex.difficulty}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-emerald-400 font-medium">
+                    {formData.category === "Muzyka"
+                      ? "🔗 Link do Playlisty (Spotify lub YouTube)"
+                      : "🔗 Źródła wideo (YouTube, Shorts, Dysk Google)"}
+                  </label>
+                  {formData.category !== "Muzyka" && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData((p) => ({ ...p, sources: [...p.sources, ""] }))}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
+                    >
+                      + Dodaj kolejne wideo
+                    </button>
+                  )}
+                </div>
+
+                {formData.sources.map((s, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder={formData.category === "Muzyka" ? "https://open.spotify.com/playlist/..." : `Link wideo #${idx + 1}`}
+                      value={s}
+                      onChange={(e) => {
+                        const newS = [...formData.sources];
+                        newS[idx] = e.target.value;
+                        setFormData({ ...formData, sources: newS });
+                      }}
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                    {formData.sources.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((p) => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
+                        className="text-neutral-500 hover:text-red-400 text-sm px-2 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
+                >
+                  {editingExerciseId ? "Zapisz zmiany" : "Dodaj"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -2322,188 +2522,6 @@ export default function Home() {
                     {authMode === "login" ? "Wejdź" : "Załóż"}
                   </button>
                 </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DODAWANIA / EDYCJI POZYCJI BAZY */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-white mb-4">
-              {editingExerciseId
-                ? "✏️ Edytuj pozycję"
-                : formData.category === "Muzyka"
-                ? "🎵 Dodaj Playlistę Muzyczną"
-                : "+ Dodaj nowy element"}
-            </h2>
-
-            <form onSubmit={handleSaveExercise} className="space-y-4">
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">
-                  {formData.category === "Muzyka" ? "Nazwa Playlisty *" : "Nazwa *"}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={formData.category === "Muzyka" ? "np. Battle Hype Beats 2026" : "np. Corkscrew, B-twist"}
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Kategoria</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => {
-                      const newCat = e.target.value;
-                      setFormData({
-                        ...formData,
-                        category: newCat,
-                        subcategory: SUBCATEGORIES_CONFIG[newCat][1] || "",
-                        difficulty: newCat === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
-                      });
-                    }}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    {[...EXERCISE_CATEGORIES, "Muzyka", "Dieta"].map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">
-                    {formData.category === "Muzyka" ? "Gatunek muzyki" : "Podkategoria"}
-                  </label>
-                  <select
-                    value={formData.subcategory}
-                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    {SUBCATEGORIES_CONFIG[formData.category]
-                      ?.filter((s) => !s.startsWith("Wszystkie"))
-                      .map((sub) => (
-                        <option key={sub} value={sub}>
-                          {sub}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
-              {formData.category !== "Muzyka" && (
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Poziom</label>
-                  <select
-                    value={formData.difficulty}
-                    onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    {(formData.category === "Tricking"
-                      ? TRICKING_LEVELS.filter((l) => !l.startsWith("Wszystkie"))
-                      : STANDARD_DIFFICULTIES
-                    ).map((lvl) => (
-                      <option key={lvl} value={lvl}>
-                        {lvl}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs text-emerald-400 block mb-1 font-medium">
-                  {formData.category === "Muzyka" ? "Krótki opis / Klimat playlisty *" : "Krótki opis *"}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={formData.category === "Muzyka" ? "np. Szybki beat, idealny pod walki" : "Krótki opis..."}
-                  value={formData.short_description}
-                  onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              {formData.category !== "Muzyka" && (
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Wskazówki metodyczne</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Technika, błędy..."
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-emerald-400 font-medium">
-                    {formData.category === "Muzyka"
-                      ? "🔗 Link do Playlisty (Spotify lub YouTube)"
-                      : "🔗 Źródła wideo (YouTube, Shorts, Dysk Google)"}
-                  </label>
-                  {formData.category !== "Muzyka" && (
-                    <button
-                      type="button"
-                      onClick={() => setFormData((p) => ({ ...p, sources: [...p.sources, ""] }))}
-                      className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
-                    >
-                      + Dodaj kolejne wideo
-                    </button>
-                  )}
-                </div>
-
-                {formData.sources.map((s, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder={formData.category === "Muzyka" ? "https://open.spotify.com/playlist/..." : `Link wideo #${idx + 1}`}
-                      value={s}
-                      onChange={(e) => {
-                        const newS = [...formData.sources];
-                        newS[idx] = e.target.value;
-                        setFormData({ ...formData, sources: newS });
-                      }}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                    />
-                    {formData.sources.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData((p) => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
-                        className="text-neutral-500 hover:text-red-400 text-sm px-2 cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
-                >
-                  Anuluj
-                </button>
-                <button
-                  type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
-                >
-                  {editingExerciseId ? "Zapisz zmiany" : "Dodaj"}
-                </button>
               </div>
             </form>
           </div>
