@@ -926,50 +926,48 @@ export default function Home() {
   const isExerciseCategoryActive = EXERCISE_CATEGORIES.includes(activeCategory);
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-16">
+    <main className="min-h-screen bg-neutral-950 text-neutral-100 pb-20">
       {/* SPOTLIGHT GUIDED TOUR */}
       {isTutorialOpen && (
         <div className="fixed inset-0 z-50 pointer-events-auto">
-          <div className="absolute inset-0 bg-black/75 transition-all duration-300" />
+          <div className="absolute inset-0 bg-black/80 transition-all duration-300" />
 
           {targetRect && (
             <div
-              className="absolute border-2 border-emerald-400 rounded-2xl shadow-[0_0_30px_rgba(52,211,153,0.4)] pointer-events-none transition-all duration-300"
+              className="absolute border-2 border-emerald-400 rounded-2xl shadow-[0_0_25px_rgba(52,211,153,0.4)] pointer-events-none transition-all duration-300"
               style={{
-                top: targetRect.top + window.scrollY - 6,
-                left: targetRect.left + window.scrollX - 6,
-                width: targetRect.width + 12,
-                height: targetRect.height + 12,
+                top: Math.max(0, targetRect.top + window.scrollY - 4),
+                left: Math.max(0, targetRect.left + window.scrollX - 4),
+                width: Math.min(window.innerWidth - 8, targetRect.width + 8),
+                height: targetRect.height + 8,
               }}
             />
           )}
 
           <div
-            className="fixed z-50 bg-neutral-900 border border-emerald-500/60 rounded-3xl p-6 shadow-2xl max-w-sm w-[90vw] space-y-4 animate-in fade-in zoom-in-95 duration-200"
+            className="fixed z-50 bg-neutral-900 border border-emerald-500/60 rounded-3xl p-5 shadow-2xl max-w-sm w-[92vw] mx-auto space-y-3.5"
             style={{
               top: targetRect
-                ? Math.min(window.innerHeight - 240, Math.max(20, targetRect.bottom + 16))
+                ? Math.min(window.innerHeight - 250, Math.max(16, targetRect.bottom + 14))
                 : "50%",
-              left: targetRect
-                ? Math.min(window.innerWidth - 340, Math.max(20, targetRect.left))
-                : "50%",
-              transform: !targetRect ? "translate(-50%, -50%)" : "none",
+              left: "50%",
+              transform: "translateX(-50%)",
             }}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2.5 py-0.5 rounded-full">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-full">
                 Krok {tutorialStep + 1} z {TOUR_STEPS.length}
               </span>
               <button
                 onClick={closeTutorial}
-                className="text-neutral-500 hover:text-white text-xs px-2 py-1 cursor-pointer"
+                className="text-neutral-500 hover:text-white text-xs px-2 py-1"
               >
                 Pomiń ✕
               </button>
             </div>
 
-            <div className="space-y-1.5">
-              <h3 className="text-base font-extrabold text-white">
+            <div className="space-y-1">
+              <h3 className="text-sm font-extrabold text-white">
                 {TOUR_STEPS[tutorialStep].title}
               </h3>
               <p className="text-neutral-300 text-xs leading-relaxed">
@@ -984,7 +982,7 @@ export default function Home() {
                 className={`text-xs px-3 py-1.5 rounded-xl font-medium ${
                   tutorialStep === 0
                     ? "opacity-30 cursor-not-allowed text-neutral-500"
-                    : "text-neutral-300 hover:bg-neutral-800 cursor-pointer"
+                    : "text-neutral-300 hover:bg-neutral-800"
                 }`}
               >
                 ‹ Wstecz
@@ -992,7 +990,7 @@ export default function Home() {
 
               <button
                 onClick={nextTutorialStep}
-                className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
+                className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1 shadow-md shadow-emerald-500/20"
               >
                 <span>{tutorialStep === TOUR_STEPS.length - 1 ? "Gotowe!" : "Dalej"}</span>
                 <span>➔</span>
@@ -1002,14 +1000,14 @@ export default function Home() {
         </div>
       )}
 
-      {/* HERO BANNER */}
+      {/* HERO BANNER - RESPONSYWNY */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {heroImages.map((src, idx) => (
             <div
               key={idx}
               className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                idx === currentHeroIdx ? "opacity-75" : "opacity-0"
+                idx === currentHeroIdx ? "opacity-70" : "opacity-0"
               }`}
             >
               <img
@@ -1019,40 +1017,31 @@ export default function Home() {
               />
             </div>
           ))}
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/60 to-neutral-950/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/75 to-neutral-950/40" />
         </div>
 
-        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-6 pb-10 flex flex-col justify-between min-h-[480px] md:min-h-[540px]">
-          <div className="flex items-start justify-between gap-4 w-full">
-            {!currentUser ? (
-              <div id="tour-header" className="max-w-md bg-neutral-950/70 p-4 rounded-2xl backdrop-blur-md border border-neutral-800/80 shadow-2xl">
-                <div className="inline-block border border-neutral-700/80 bg-neutral-900/90 rounded-xl px-4 py-2 shadow-lg mb-2.5">
-                  <h1 className="text-2xl md:text-3xl font-black tracking-tight text-emerald-400 uppercase">
-                    ROAD TO GOAT
-                  </h1>
-                </div>
-                <p className="text-neutral-300 text-xs leading-relaxed">
-                  Szukasz pomysłu na jednostkę siłową, chcesz odblokować nowy trick, a może budujesz szczyt formy na zawody? Ta platforma da Ci narzędzia i strukturę, aby krok po kroku stać się GOAT-em.
-                </p>
-              </div>
-            ) : (
-              <div />
-            )}
+        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-8 flex flex-col justify-between min-h-[440px] md:min-h-[520px]">
+          {/* TOP BAR NA TELEFONIE */}
+          <div className="flex items-center justify-between gap-2 w-full">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xl">🥋</span>
+              <span className="text-xs md:text-sm font-black tracking-tight text-emerald-400 uppercase">
+                ROAD TO GOAT
+              </span>
+            </div>
 
-            <div className="flex items-center gap-3 ml-auto">
+            <div className="flex items-center gap-2">
               <Link
                 id="tour-timeline-btn"
                 href="/timeline"
-                className={`relative flex items-center gap-2.5 bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 hover:border-emerald-500/60 rounded-2xl shadow-xl transition-all active:scale-95 ${
-                  currentUser ? "px-5 py-2.5 text-sm font-bold" : "px-3.5 py-1.5 text-xs font-medium"
-                }`}
+                className="relative flex items-center gap-1.5 bg-neutral-900/90 border border-neutral-700 hover:border-emerald-500/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold"
               >
-                <span className={currentUser ? "text-lg" : "text-sm"}>🎬</span>
-                <span>Timeline</span>
+                <span>🎬</span>
+                <span className="hidden sm:inline">Timeline</span>
                 {currentUser && hasNewTimelinePosts && (
-                  <span className="relative flex h-2.5 w-2.5">
+                  <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
                   </span>
                 )}
               </Link>
@@ -1063,21 +1052,21 @@ export default function Home() {
                     setAuthMode("login");
                     setIsAuthModalOpen(true);
                   }}
-                  className="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-xs px-4 py-2 rounded-xl text-neutral-300 hover:text-white transition-all cursor-pointer"
+                  className="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700 text-xs px-3 py-1.5 rounded-xl text-neutral-200 transition-all cursor-pointer font-medium"
                 >
-                  👤 Zaloguj / Rejestracja
+                  👤 Wejdź
                 </button>
               ) : (
-                <div className="flex items-center gap-2 bg-neutral-900/90 border border-neutral-700/80 p-1.5 rounded-2xl shadow-xl">
+                <div className="flex items-center gap-1.5 bg-neutral-900/90 border border-neutral-700/80 p-1 rounded-xl">
                   <Link
                     href="/profile"
-                    className="text-sm text-emerald-400 hover:text-emerald-300 font-bold px-3 py-1 bg-neutral-950/80 border border-neutral-800 rounded-xl"
+                    className="text-xs text-emerald-400 font-bold px-2 py-1 bg-neutral-950/80 border border-neutral-800 rounded-lg truncate max-w-[110px]"
                   >
-                    👤 {currentUser.username} {currentUser.role === "coach" && "(Admin)"}
+                    👤 {currentUser.username}
                   </Link>
                   <button
                     onClick={handleLogout}
-                    className="bg-neutral-900 hover:bg-red-950/60 border border-neutral-800 hover:border-red-800 text-xs px-3 py-1.5 rounded-xl text-neutral-400 hover:text-red-300 transition-all cursor-pointer font-medium"
+                    className="bg-neutral-900 hover:bg-red-950/60 border border-neutral-800 text-[11px] px-2 py-1 rounded-lg text-neutral-400 hover:text-red-300 transition-all font-medium"
                   >
                     Wyloguj
                   </button>
@@ -1086,84 +1075,84 @@ export default function Home() {
             </div>
           </div>
 
-          {currentUser && (
-            <div className="my-auto py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-end">
-              <div id="tour-header" className="lg:col-span-2">
-                <div className="inline-block bg-neutral-900/80 backdrop-blur-md border border-neutral-700/80 rounded-2xl px-5 py-3 shadow-xl mb-3">
-                  <h1 className="text-3xl md:text-5xl font-black tracking-tight text-emerald-400 uppercase">
-                    ROAD TO GOAT
-                  </h1>
-                </div>
-                <p className="text-neutral-200 text-xs md:text-sm max-w-xl leading-relaxed drop-shadow bg-neutral-950/50 p-3.5 rounded-xl backdrop-blur-sm border border-neutral-800/40">
-                  Opanowane elementy: <strong className="text-emerald-400">{masteredSkillIds.length}</strong>. 
-                  Nie wiesz, co dzisiaj trenować? Skorzystaj z inteligentnej rekomendacji kolejnego kroku w drzewku!
-                </p>
-
-                {recommendedSkill && (
-                  <div className="mt-3 inline-flex items-center gap-3 bg-emerald-950/50 border border-emerald-500/40 px-4 py-2 rounded-2xl backdrop-blur-md">
-                    <span className="text-xs text-neutral-300">
-                      🎯 Twój kolejny krok: <strong className="text-emerald-300">{recommendedSkill.title}</strong>
-                    </span>
-                    <button
-                      onClick={() => setShowRecommendationModal(true)}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-black text-[11px] font-bold px-3 py-1 rounded-xl transition-all cursor-pointer"
-                    >
-                      Pokaż metodykę →
-                    </button>
-                  </div>
-                )}
+          {/* GŁÓWNA TREŚĆ HERO */}
+          <div className="my-auto py-5 grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
+            <div id="tour-header" className="lg:col-span-2 space-y-2">
+              <div className="inline-block bg-neutral-900/85 backdrop-blur-md border border-neutral-700/80 rounded-2xl px-4 py-2 shadow-lg">
+                <h1 className="text-2xl md:text-5xl font-black tracking-tight text-emerald-400 uppercase">
+                  ROAD TO GOAT
+                </h1>
               </div>
+              <p className="text-neutral-200 text-xs md:text-sm max-w-xl leading-relaxed drop-shadow bg-neutral-950/60 p-3 rounded-xl backdrop-blur-sm border border-neutral-800/40">
+                Szukasz pomysłu na trening, odblokowujesz nowy trick, a może celujesz w szczyt formy na zawody? Otrzymujesz strukturę, by krok po kroku osiągnąć wyznaczony poziom.
+              </p>
 
+              {currentUser && recommendedSkill && (
+                <div className="inline-flex flex-wrap items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 p-2.5 rounded-xl backdrop-blur-md">
+                  <span className="text-xs text-neutral-200">
+                    🎯 Następny krok: <strong className="text-emerald-300">{recommendedSkill.title}</strong>
+                  </span>
+                  <button
+                    onClick={() => setShowRecommendationModal(true)}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-black text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all"
+                  >
+                    Metodyka →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* KAFELEK ZAWODÓW NA TELEFONIE */}
+            {currentUser && (
               <div
                 id="tour-competition-widget"
                 onClick={() => setIsCompManagerOpen(true)}
-                className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 hover:border-emerald-500/50 rounded-2xl p-4 shadow-xl cursor-pointer transition-all"
-                title="Kliknij, aby zarządzać zawodami"
+                className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 hover:border-emerald-500/50 rounded-2xl p-3.5 shadow-xl cursor-pointer transition-all"
               >
-                <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2 mb-2.5">
-                  <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
+                <div className="flex items-center justify-between border-b border-neutral-800/80 pb-1.5 mb-2">
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
                     <span>🏆</span> Najbliższy Start
                   </span>
-                  <span className="text-[10px] text-emerald-400 hover:underline">
+                  <span className="text-[10px] text-emerald-400">
                     Zarządzaj ({competitions.length}) ↗
                   </span>
                 </div>
 
                 {nextCompetition ? (
-                  <div className="space-y-2">
-                    <div className="flex items-baseline justify-between">
-                      <h3 className="font-bold text-white text-sm truncate max-w-[170px]">
+                  <div className="space-y-1.5">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h3 className="font-bold text-white text-xs md:text-sm truncate">
                         {nextCompetition.name}
                       </h3>
-                      <span className="text-xs font-mono font-bold text-emerald-400">
+                      <span className="text-xs font-mono font-bold text-emerald-400 shrink-0">
                         {daysToComp !== null ? `${daysToComp} dni` : ""}
                       </span>
                     </div>
 
-                    <div className="space-y-1 text-[11px]">
-                      <div className="text-neutral-400 flex justify-between">
-                        <span>Data: {nextCompetition.date}</span>
-                        {nextCompetition.location && <span>{nextCompetition.location}</span>}
-                      </div>
-                      <div className="pt-1">
-                        <span className="text-emerald-300 font-semibold bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 rounded-md inline-block">
-                          ⚡ Faza: {calculatedPhase}
-                        </span>
-                      </div>
+                    <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                      <span>📅 {nextCompetition.date}</span>
+                      {nextCompetition.location && <span>📍 {nextCompetition.location}</span>}
+                    </div>
+
+                    <div className="pt-0.5">
+                      <span className="text-emerald-300 font-bold text-[10px] bg-emerald-950 border border-emerald-800/80 px-2 py-0.5 rounded-md inline-block">
+                        ⚡ {calculatedPhase}
+                      </span>
                     </div>
                   </div>
                 ) : (
                   <div className="text-xs text-neutral-500 py-1">
-                    Brak nadchodzących zawodów. Kliknij, aby zaplanować.
+                    Brak zaplanowanych zawodów. Kliknij, aby dodać.
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          <div className="relative z-40 flex flex-wrap items-center justify-between gap-3 pt-2">
+          {/* PRZYCISKI AKCJI - RESPONSYWNY PASEK */}
+          <div className="relative z-30 flex flex-wrap items-center justify-between gap-2 pt-2">
             {currentUser ? (
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => {
                     setEditingExerciseId(null);
@@ -1179,33 +1168,33 @@ export default function Home() {
                     });
                     setIsModalOpen(true);
                   }}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-3 py-2 rounded-xl text-xs transition-all shadow-md active:scale-95 flex-1 sm:flex-none text-center"
                 >
-                  + Dodaj pozycję
+                  + Dodaj
                 </button>
 
-                <div className="relative inline-block" ref={workoutDropdownRef} id="tour-workouts-btn">
+                <div className="relative inline-block flex-1 sm:flex-none" ref={workoutDropdownRef} id="tour-workouts-btn">
                   <button
                     type="button"
                     onClick={() => setIsWorkoutDropdownOpen((prev) => !prev)}
-                    className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                    className="w-full bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
                   >
                     <span>🏋️ Treningi</span>
                     <span className="text-[10px] text-emerald-400 font-bold">▾</span>
                   </button>
 
                   {isWorkoutDropdownOpen && (
-                    <div className="absolute left-0 bottom-full mb-2 w-56 bg-neutral-900 border border-neutral-700 rounded-2xl p-2 shadow-2xl z-50 space-y-1">
+                    <div className="absolute left-0 bottom-full mb-2 w-52 bg-neutral-900 border border-neutral-700 rounded-2xl p-2 shadow-2xl z-50 space-y-1">
                       <button
                         type="button"
                         onClick={() => {
                           setIsWorkoutDropdownOpen(false);
                           setIsWorkoutModalOpen(true);
                         }}
-                        className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2.5 cursor-pointer"
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2"
                       >
-                        <span className="text-base">✨</span>
-                        <span>Stwórz Nowy Trening</span>
+                        <span>✨</span>
+                        <span>Stwórz Trening</span>
                       </button>
                       <button
                         type="button"
@@ -1213,10 +1202,10 @@ export default function Home() {
                           setIsWorkoutDropdownOpen(false);
                           setIsImportModalOpen(true);
                         }}
-                        className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2.5 cursor-pointer border-t border-neutral-800/80 pt-2"
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-neutral-200 hover:bg-neutral-800 hover:text-emerald-400 transition-colors flex items-center gap-2 border-t border-neutral-800/80 pt-1.5"
                       >
-                        <span className="text-base">📥</span>
-                        <span>Importuj Kodem od Kolegi</span>
+                        <span>📥</span>
+                        <span>Importuj Kodem</span>
                       </button>
                     </div>
                   )}
@@ -1224,16 +1213,16 @@ export default function Home() {
 
                 <button
                   onClick={() => setIsCompManagerOpen(true)}
-                  className="bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 hover:text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+                  className="bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-700 px-3 py-2 rounded-xl text-xs font-semibold flex-1 sm:flex-none text-center"
                 >
-                  🏆 Plan na zawody
+                  🏆 Starty
                 </button>
               </div>
             ) : (
               <div />
             )}
 
-            <div className="hidden sm:flex items-center gap-1.5 opacity-60">
+            <div className="hidden sm:flex items-center gap-1.5 opacity-60 ml-auto">
               {heroImages.map((_, i) => (
                 <div
                   key={i}
@@ -1247,26 +1236,27 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PASEK KATEGORII */}
-      <div className="max-w-6xl mx-auto px-4 md:px-8 mt-8 space-y-6">
-        <div className="flex flex-wrap items-center gap-2.5 pb-2 select-none border-b border-neutral-900 pb-3">
-          <div className="relative" ref={exerciseDropdownRef} id="tour-exercise-base">
+      {/* PASEK ZAKŁADEK I WYSZUKIWARKA - PRZYJAZNE DLA TELEFONU */}
+      <div className="max-w-6xl mx-auto px-4 md:px-8 mt-5 space-y-4">
+        {/* Poziomo przewijany pasek kategorii głównych */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none select-none border-b border-neutral-900">
+          <div className="relative shrink-0" ref={exerciseDropdownRef} id="tour-exercise-base">
             <button
               onClick={() => setIsExerciseDropdownOpen(!isExerciseDropdownOpen)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer flex items-center gap-2 ${
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                 isExerciseCategoryActive
                   ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                  : "bg-neutral-900 text-neutral-300 hover:text-white border border-neutral-800"
+                  : "bg-neutral-900 text-neutral-300 border border-neutral-800"
               }`}
             >
-              <span>📚 Baza Ćwiczeń</span>
+              <span>📚 Baza</span>
               <span className="text-[10px] opacity-75">
                 {isExerciseCategoryActive ? `(${activeCategory})` : "▾"}
               </span>
             </button>
 
             {isExerciseDropdownOpen && (
-              <div className="absolute left-0 mt-2 w-48 bg-neutral-900 border border-neutral-800 rounded-2xl p-2 shadow-2xl z-30 space-y-1">
+              <div className="absolute left-0 mt-2 w-44 bg-neutral-900 border border-neutral-800 rounded-2xl p-1.5 shadow-2xl z-40 space-y-1">
                 {EXERCISE_CATEGORIES.map((cat) => (
                   <button
                     key={cat}
@@ -1276,7 +1266,7 @@ export default function Home() {
                       setActiveTrickingLevel("Wszystkie poziomy");
                       setIsExerciseDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold ${
                       activeCategory === cat
                         ? "bg-emerald-500/20 text-emerald-400 font-bold"
                         : "text-neutral-300 hover:bg-neutral-800"
@@ -1294,10 +1284,10 @@ export default function Home() {
               setActiveCategory("Muzyka");
               setActiveSubcategory(SUBCATEGORIES_CONFIG["Muzyka"][0]);
             }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
               activeCategory === "Muzyka"
                 ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+                : "bg-neutral-900 text-neutral-400 border border-neutral-800"
             }`}
           >
             🎵 Muzyka
@@ -1308,10 +1298,10 @@ export default function Home() {
               setActiveCategory("Dieta");
               setActiveSubcategory(SUBCATEGORIES_CONFIG["Dieta"][0]);
             }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
               activeCategory === "Dieta"
                 ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+                : "bg-neutral-900 text-neutral-400 border border-neutral-800"
             }`}
           >
             🥗 Dieta
@@ -1323,39 +1313,38 @@ export default function Home() {
                 setActiveCategory("Własne treningi");
                 setActiveSubcategory(SUBCATEGORIES_CONFIG["Własne treningi"][0]);
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                 activeCategory === "Własne treningi"
                   ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                  : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+                  : "bg-neutral-900 text-neutral-400 border border-neutral-800"
               }`}
             >
-              📋 Własne treningi
+              📋 Treningi
             </button>
           )}
         </div>
 
+        {/* Wyszukiwarka */}
         <input
           type="text"
           placeholder="Szukaj tricku, ćwiczenia, elementu..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+          className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs md:text-sm focus:outline-none focus:border-emerald-500 transition-colors"
         />
 
+        {/* Podkategorie - płynny poziomy scroll na telefonie */}
         {activeCategory !== "Własne treningi" && (
-          <div className="space-y-3 select-none">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-              <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mr-1">
-                Podział:
-              </span>
+          <div className="space-y-2 select-none">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
               {SUBCATEGORIES_CONFIG[activeCategory]?.map((sub) => (
                 <button
                   key={sub}
                   onClick={() => setActiveSubcategory(sub)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
                     activeSubcategory === sub
                       ? "bg-neutral-200 text-neutral-950 font-bold"
-                      : "bg-neutral-900/80 text-neutral-400 hover:text-neutral-200 border border-neutral-800"
+                      : "bg-neutral-900/80 text-neutral-400 border border-neutral-800"
                   }`}
                 >
                   {sub}
@@ -1364,18 +1353,15 @@ export default function Home() {
             </div>
 
             {activeCategory === "Tricking" && (
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                <span className="text-xs text-neutral-500 font-semibold uppercase tracking-wider mr-1">
-                  Poziom:
-                </span>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                 {TRICKING_LEVELS.map((lvl) => (
                   <button
                     key={lvl}
                     onClick={() => setActiveTrickingLevel(lvl)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-all cursor-pointer ${
+                    className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
                       activeTrickingLevel === lvl
                         ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
-                        : "bg-neutral-900/40 text-neutral-500 hover:text-neutral-300 border border-neutral-900"
+                        : "bg-neutral-900/40 text-neutral-500 border border-neutral-900"
                     }`}
                   >
                     {lvl}
@@ -1388,33 +1374,33 @@ export default function Home() {
 
         {/* WŁASNE TRENINGI (WIDOK) */}
         {activeCategory === "Własne treningi" && currentUser && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-neutral-900/40 border border-neutral-800/80 p-3.5 rounded-2xl">
+          <div className="space-y-3 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-neutral-900/40 border border-neutral-800/80 p-3 rounded-xl">
               <span className="text-xs text-neutral-400 font-medium">
-                Twoje jednostki treningowe ({visibleWorkouts.length})
+                Twoje jednostki ({visibleWorkouts.length})
               </span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsWorkoutModalOpen(true)}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all shadow cursor-pointer"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-3 py-1.5 rounded-lg transition-all"
                 >
-                  + Stwórz trening
+                  + Stwórz
                 </button>
                 <button
                   onClick={() => setIsImportModalOpen(true)}
-                  className="bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-500/40 hover:border-emerald-500 text-xs px-3.5 py-1.5 rounded-xl transition-all font-semibold cursor-pointer"
+                  className="bg-neutral-900 hover:bg-neutral-800 text-emerald-400 border border-emerald-500/40 text-xs px-3 py-1.5 rounded-lg transition-all font-semibold"
                 >
-                  📥 Importuj kodem
+                  📥 Importuj
                 </button>
               </div>
             </div>
 
             {visibleWorkouts.length === 0 ? (
-              <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl space-y-3">
-                <p>Nie masz jeszcze zapisanych treningów.</p>
+              <div className="text-center py-12 text-neutral-500 text-xs border border-neutral-900 rounded-2xl">
+                Brak zapisanych treningów.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {visibleWorkouts.map((wo) => {
                   const includedExercises = exercises.filter((ex) =>
                     wo.exercise_ids?.includes(ex.id)
@@ -1422,31 +1408,22 @@ export default function Home() {
                   return (
                     <div
                       key={wo.id}
-                      className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-6 space-y-4 hover:border-emerald-500/40 transition-colors"
+                      className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4 space-y-3"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
-                            {wo.level}
-                          </span>
-                          {wo.original_author && (
-                            <span className="text-[10px] text-amber-300 bg-amber-950/50 border border-amber-800/50 px-2 py-0.5 rounded-md">
-                              Od: {wo.original_author}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
+                          {wo.level}
+                        </span>
+                        <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => handleCopyShareCode(wo.id, wo.title)}
-                            className="text-xs text-neutral-400 hover:text-emerald-400 px-2 py-0.5 bg-neutral-950 border border-neutral-800 rounded-md cursor-pointer"
-                            title="Kopiuj kod udostępnienia"
+                            className="text-xs text-neutral-400 hover:text-emerald-400 px-2 py-0.5 bg-neutral-950 border border-neutral-800 rounded-md"
                           >
-                            🔗 Udostępnij
+                            🔗 Kod
                           </button>
                           <button
                             onClick={() => handleDeleteWorkout(wo.id, wo.title)}
-                            className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5 bg-red-950/40 border border-red-900/50 rounded-md cursor-pointer"
-                            title="Usuń trening"
+                            className="text-xs text-red-400 px-2 py-0.5 bg-red-950/40 border border-red-900/50 rounded-md"
                           >
                             🗑️
                           </button>
@@ -1454,48 +1431,42 @@ export default function Home() {
                       </div>
 
                       <div>
-                        <h3 className="text-xl font-bold text-white mb-1">{wo.title}</h3>
+                        <h3 className="text-base font-bold text-white mb-0.5">{wo.title}</h3>
                         <p className="text-xs text-neutral-400 leading-relaxed">{wo.description}</p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => setActiveSessionWorkout(wo)}
-                          className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-emerald-500/20 active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs py-2 rounded-xl text-center"
                         >
-                          <span>▶ Rozpocznij Trening</span>
+                          ▶ Odpal na Sali
                         </button>
-
                         <button
                           onClick={() => handlePublishWorkoutToTimeline(wo, "45 min")}
-                          className="bg-neutral-950 hover:bg-neutral-800 border border-neutral-700/80 text-emerald-400 text-xs py-2.5 rounded-xl transition-all font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="bg-neutral-950 hover:bg-neutral-800 border border-neutral-700/80 text-emerald-400 text-xs py-2 rounded-xl text-center font-semibold"
                         >
-                          <span>🏆 Wrzuć na Timeline</span>
+                          🏆 Timeline
                         </button>
                       </div>
 
-                      <div className="space-y-2 border-t border-neutral-800/80 pt-3">
-                        <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-                          Ćwiczenia w planie ({includedExercises.length}):
+                      <div className="space-y-1.5 border-t border-neutral-800/80 pt-2 text-xs">
+                        <p className="text-[11px] font-semibold text-neutral-400">
+                          Ćwiczenia ({includedExercises.length}):
                         </p>
-                        <div className="space-y-1.5">
-                          {includedExercises.map((ex, i) => (
-                            <div
-                              key={ex.id}
-                              className="flex items-center justify-between p-2 bg-neutral-950 rounded-xl text-xs border border-neutral-800/80"
-                            >
-                              <span className="text-neutral-300 font-medium">
-                                {i + 1}. {ex.title} ({ex.category})
-                              </span>
-                              <Link
-                                href={`/exercise/${ex.id}`}
-                                className="text-emerald-400 hover:text-emerald-300 text-[11px]"
-                              >
-                                Metodyka →
-                              </Link>
-                            </div>
-                          ))}
-                        </div>
+                        {includedExercises.map((ex, i) => (
+                          <div
+                            key={ex.id}
+                            className="flex items-center justify-between p-1.5 bg-neutral-950 rounded-lg text-xs"
+                          >
+                            <span className="text-neutral-300 truncate max-w-[200px]">
+                              {i + 1}. {ex.title}
+                            </span>
+                            <Link href={`/exercise/${ex.id}`} className="text-emerald-400 text-[11px] shrink-0">
+                              Metodyka →
+                            </Link>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   );
@@ -1505,18 +1476,18 @@ export default function Home() {
           </div>
         )}
 
-        {/* STANDARDOWA SIATKA ĆWICZEŃ */}
+        {/* LISTA ĆWICZEŃ W BAZIE - RESPONSYWNE KARTY */}
         {activeCategory !== "Własne treningi" && (
           loading ? (
-            <div className="text-center py-16 text-neutral-500 text-sm animate-pulse">
+            <div className="text-center py-12 text-neutral-500 text-xs animate-pulse">
               Ładowanie bazy...
             </div>
           ) : filteredList.length === 0 ? (
-            <div className="text-center py-16 text-neutral-500 text-sm border border-neutral-900 rounded-3xl">
+            <div className="text-center py-12 text-neutral-500 text-xs border border-neutral-900 rounded-2xl">
               Brak elementów w tej kategorii.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
               {filteredList.map((item) => {
                 const isExpanded = !!expandedCardIds[item.id];
                 const primaryMedia = (item.sources && item.sources[0]) || item.video_url || "";
@@ -1527,39 +1498,31 @@ export default function Home() {
                   <div
                     key={item.id}
                     onClick={() => toggleExpand(item.id)}
-                    className={`border rounded-2xl p-5 transition-all duration-300 select-none cursor-pointer flex flex-col justify-between ${
+                    className={`border rounded-2xl p-4 transition-all duration-300 select-none cursor-pointer flex flex-col justify-between ${
                       isMastered
-                        ? "bg-emerald-950/20 border-emerald-500/60 shadow-lg shadow-emerald-950/30"
+                        ? "bg-emerald-950/20 border-emerald-500/60 shadow-md"
                         : isExpanded
-                        ? "bg-neutral-900/90 border-neutral-700 shadow-xl"
-                        : "bg-neutral-900/60 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/80"
+                        ? "bg-neutral-900/90 border-neutral-700"
+                        : "bg-neutral-900/60 border-neutral-800 hover:border-neutral-700"
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[180px]">
+                      <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[160px]">
                           {item.subcategory || item.category}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-neutral-400 truncate">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-neutral-400 truncate max-w-[100px]">
                             {item.difficulty}
                           </span>
-                          <span
-                            className={`text-xs text-neutral-500 transition-transform duration-300 ${
-                              isExpanded ? "rotate-180 text-emerald-400" : ""
-                            }`}
-                          >
+                          <span className={`text-[10px] text-neutral-500 transition-transform ${isExpanded ? "rotate-180" : ""}`}>
                             ▼
                           </span>
                         </div>
                       </div>
 
                       <div className="flex items-start justify-between gap-2">
-                        <h3
-                          className={`text-lg font-bold transition-colors ${
-                            isMastered ? "text-emerald-300" : "text-white"
-                          }`}
-                        >
+                        <h3 className={`text-base font-bold ${isMastered ? "text-emerald-300" : "text-white"}`}>
                           {item.title}
                         </h3>
 
@@ -1570,14 +1533,13 @@ export default function Home() {
                               e.stopPropagation();
                               toggleMasteredSkill(item.id);
                             }}
-                            className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer shrink-0 ${
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 ${
                               isMastered
                                 ? "bg-emerald-500 text-black border-emerald-400"
-                                : "bg-neutral-950/80 text-neutral-400 border-neutral-700 hover:border-emerald-500 hover:text-emerald-300"
+                                : "bg-neutral-950/80 text-neutral-400 border-neutral-700"
                             }`}
-                            title={isMastered ? "Opanowane! Kliknij by odznaczyć" : "Oznacz jako opanowane"}
                           >
-                            {isMastered ? "✓ Umiem to" : "+ Umiem to"}
+                            {isMastered ? "✓ Umiem" : "+ Umiem"}
                           </button>
                         )}
                       </div>
@@ -1586,11 +1548,11 @@ export default function Home() {
                     <div
                       className={`grid transition-all duration-300 ease-in-out ${
                         isExpanded
-                          ? "grid-rows-[1fr] opacity-100 mt-3 pt-3 border-t border-neutral-800/80"
+                          ? "grid-rows-[1fr] opacity-100 mt-3 pt-2.5 border-t border-neutral-800/80"
                           : "grid-rows-[0fr] opacity-0 mt-0 pt-0 border-transparent"
                       }`}
                     >
-                      <div className="overflow-hidden space-y-4">
+                      <div className="overflow-hidden space-y-3">
                         <p className="text-neutral-400 text-xs leading-relaxed">
                           {item.short_description || "Brak opisu."}
                         </p>
@@ -1600,8 +1562,8 @@ export default function Home() {
                             <iframe
                               src={primaryMedia}
                               width="100%"
-                              height="152"
-                              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                              height="80"
+                              allow="autoplay; clipboard-write; encrypted-media; fullscreen"
                               loading="lazy"
                             />
                           </div>
@@ -1609,7 +1571,7 @@ export default function Home() {
 
                         <div className="flex items-center justify-between pt-1">
                           {currentUser?.role === "coach" ? (
-                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1627,7 +1589,7 @@ export default function Home() {
                                   });
                                   setIsModalOpen(true);
                                 }}
-                                className="text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2.5 py-1.5 rounded-lg border border-neutral-700"
+                                className="text-xs bg-neutral-800 text-neutral-300 px-2 py-1 rounded-lg border border-neutral-700"
                               >
                                 ✏️ Edytuj
                               </button>
@@ -1638,7 +1600,7 @@ export default function Home() {
                                   const { error } = await supabase.from("exercises").delete().eq("id", item.id);
                                   if (!error) setExercises((p) => p.filter((x) => x.id !== item.id));
                                 }}
-                                className="text-xs bg-red-950/40 hover:bg-red-900/60 text-red-400 px-2.5 py-1.5 rounded-lg border border-red-900/50"
+                                className="text-xs bg-red-950/40 text-red-400 px-2 py-1 rounded-lg border border-red-900/50"
                               >
                                 🗑️
                               </button>
@@ -1648,10 +1610,10 @@ export default function Home() {
                           )}
 
                           {!isSpotify && (
-                            <div onClick={(e) => e.stopPropagation()}>
+                            <div onClick={(e) => e.stopPropagation()} className="ml-auto">
                               <Link
                                 href={`/exercise/${item.id}`}
-                                className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-4 py-2 rounded-xl shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                                className="inline-flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-md active:scale-95"
                               >
                                 <span>Naucz się</span>
                                 <span>→</span>
@@ -1669,61 +1631,53 @@ export default function Home() {
         )}
       </div>
 
-      {/* PANEL ZARZĄDZANIA ZAWODAMI */}
+      {/* MODAL ZARZĄDZANIA ZAWODAMI */}
       {isCompManagerOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto space-y-6">
-            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <span>🏆</span> Kalendarz Startowy & Zawody
-                </h2>
-                <p className="text-xs text-neutral-400 mt-0.5">
-                  Faza przygotowań wyliczana jest wyłącznie dla najbliższego nadchodzącego startu.
-                </p>
-              </div>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
+              <h2 className="text-base font-bold text-white flex items-center gap-1.5">
+                <span>🏆</span> Zawody ({competitions.length})
+              </h2>
               <button
                 onClick={() => {
                   setIsCompManagerOpen(false);
                   setEditingCompId(null);
                   setCompForm({ name: "", date: "", location: "" });
                 }}
-                className="text-neutral-400 hover:text-white text-sm px-2 cursor-pointer"
+                className="text-neutral-400 hover:text-white text-xs px-2"
               >
                 ✕
               </button>
             </div>
 
-            {currentUser?.role === "coach" ? (
-              <form onSubmit={handleSaveCompetition} className="p-4 bg-neutral-950/80 border border-neutral-800 rounded-2xl space-y-3">
-                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                  {editingCompId ? "✏️ Edytuj Turniej" : "+ Dodaj Nowy Start"}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Nazwa turnieju..."
-                    value={compForm.name}
-                    onChange={(e) => setCompForm({ ...compForm, name: e.target.value })}
-                    className="sm:col-span-2 bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
+            {currentUser?.role === "coach" && (
+              <form onSubmit={handleSaveCompetition} className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-2 text-xs">
+                <input
+                  type="text"
+                  required
+                  placeholder="Nazwa turnieju..."
+                  value={compForm.name}
+                  onChange={(e) => setCompForm({ ...compForm, name: e.target.value })}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                />
+                <div className="grid grid-cols-2 gap-2">
                   <input
                     type="date"
                     required
                     value={compForm.date}
                     onChange={(e) => setCompForm({ ...compForm, date: e.target.value })}
-                    className="bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    className="bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-1 text-xs text-white"
                   />
-                </div>
-                <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Lokalizacja (np. Warszawa)..."
+                    placeholder="Miasto..."
                     value={compForm.location}
                     onChange={(e) => setCompForm({ ...compForm, location: e.target.value })}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    className="bg-neutral-900 border border-neutral-800 rounded-lg px-2 py-1 text-xs text-white"
                   />
+                </div>
+                <div className="flex justify-end gap-1.5 pt-1">
                   {editingCompId && (
                     <button
                       type="button"
@@ -1731,102 +1685,78 @@ export default function Home() {
                         setEditingCompId(null);
                         setCompForm({ name: "", date: "", location: "" });
                       }}
-                      className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-xs rounded-xl"
+                      className="px-2.5 py-1 bg-neutral-800 rounded-lg"
                     >
                       Anuluj
                     </button>
                   )}
                   <button
                     type="submit"
-                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs shrink-0 cursor-pointer"
+                    className="bg-emerald-500 text-black font-bold px-3.5 py-1 rounded-lg"
                   >
-                    {editingCompId ? "Zapisz" : "Dodaj"}
+                    {editingCompId ? "Zapisz" : "+ Dodaj"}
                   </button>
                 </div>
               </form>
-            ) : null}
+            )}
 
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
-                Zaplanowane starty w sezonie ({competitions.length}):
-              </h3>
-
-              {competitions.length === 0 ? (
-                <div className="p-8 text-center border border-dashed border-neutral-800 rounded-2xl text-xs text-neutral-500">
-                  Brak zaplanowanych imprez sportowych.
-                </div>
-              ) : (
-                competitions.map((comp) => {
-                  const isNext = nextCompetition?.id === comp.id;
-                  const isPast = new Date(comp.date).getTime() < new Date().setHours(0, 0, 0, 0);
-
-                  return (
-                    <div
-                      key={comp.id}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                        isNext
-                          ? "bg-emerald-950/30 border-emerald-500/60 shadow-lg shadow-emerald-950/20"
-                          : isPast
-                          ? "bg-neutral-950/40 border-neutral-900 opacity-60"
-                          : "bg-neutral-950/80 border-neutral-800"
-                      }`}
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-white text-sm">{comp.name}</h4>
-                          {isNext && (
-                            <span className="text-[10px] font-bold text-black bg-emerald-400 px-2 py-0.5 rounded-full">
-                              Najbliższy Start
-                            </span>
-                          )}
-                          {isPast && (
-                            <span className="text-[10px] text-neutral-500 bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">
-                              Zakończone
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-4 text-xs text-neutral-400">
-                          <span>📅 {comp.date}</span>
-                          {comp.location && <span>📍 {comp.location}</span>}
-                        </div>
-
+            <div className="space-y-2">
+              {competitions.map((comp) => {
+                const isNext = nextCompetition?.id === comp.id;
+                return (
+                  <div
+                    key={comp.id}
+                    className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                      isNext
+                        ? "bg-emerald-950/30 border-emerald-500/60"
+                        : "bg-neutral-950/80 border-neutral-800"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-bold text-white text-xs">{comp.name}</h4>
                         {isNext && (
-                          <div className="pt-1">
-                            <span className="text-emerald-300 font-bold text-xs bg-emerald-950 border border-emerald-800/80 px-2.5 py-0.5 rounded-md inline-block">
-                              ⚡ Faza: {calculatedPhase}
-                            </span>
-                          </div>
+                          <span className="text-[9px] font-bold text-black bg-emerald-400 px-1.5 py-0.2 rounded-full">
+                            Najbliższy
+                          </span>
                         )}
                       </div>
-
-                      {currentUser?.role === "coach" && (
-                        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                          <button
-                            onClick={() => {
-                              setEditingCompId(comp.id);
-                              setCompForm({
-                                name: comp.name,
-                                date: comp.date,
-                                location: comp.location || "",
-                              });
-                            }}
-                            className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs px-2.5 py-1.5 rounded-xl border border-neutral-700 cursor-pointer"
-                          >
-                            ✏️ Edytuj
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCompetition(comp.id, comp.name)}
-                            className="bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs px-2.5 py-1.5 rounded-xl border border-red-900/50 cursor-pointer"
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                      <span className="text-[10px] text-neutral-400 block mt-0.5">
+                        📅 {comp.date} {comp.location && `| 📍 ${comp.location}`}
+                      </span>
+                      {isNext && (
+                        <span className="text-[10px] font-bold text-emerald-300 mt-1 block">
+                          ⚡ {calculatedPhase}
+                        </span>
                       )}
                     </div>
-                  );
-                })
-              )}
+
+                    {currentUser?.role === "coach" && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => {
+                            setEditingCompId(comp.id);
+                            setCompForm({
+                              name: comp.name,
+                              date: comp.date,
+                              location: comp.location || "",
+                            });
+                          }}
+                          className="bg-neutral-800 px-2 py-1 rounded text-[11px]"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCompetition(comp.id, comp.name)}
+                          className="bg-red-950/50 text-red-400 px-2 py-1 rounded text-[11px]"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1834,68 +1764,293 @@ export default function Home() {
 
       {/* MODAL REKOMENDACJI ASYSTENTA */}
       {showRecommendationModal && recommendedSkill && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4">
-            <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
-              Inteligentna Rekomendacja z Drzewka
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
+          <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3">
+            <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+              Rekomendacja z Drzewka
             </span>
-            <h2 className="text-2xl font-black text-white">{recommendedSkill.title}</h2>
+            <h2 className="text-xl font-black text-white">{recommendedSkill.title}</h2>
             <p className="text-xs text-neutral-300 leading-relaxed">
               {recommendedSkill.short_description}
             </p>
-            {recommendedSkill.description && (
-              <div className="bg-neutral-950 p-4 rounded-2xl border border-neutral-800 text-xs text-neutral-400 leading-relaxed whitespace-pre-line">
-                {recommendedSkill.description}
-              </div>
-            )}
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800">
               <button
                 onClick={() => setShowRecommendationModal(false)}
-                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs rounded-xl"
+                className="px-3 py-1.5 bg-neutral-800 text-xs rounded-xl"
               >
                 Zamknij
               </button>
               <Link
                 href={`/exercise/${recommendedSkill.id}`}
-                className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs px-5 py-2 rounded-xl transition-all"
+                className="bg-emerald-500 text-black font-bold text-xs px-4 py-1.5 rounded-xl"
               >
-                Przejdź do pełnej metodyki i wideo →
+                Metodyka →
               </Link>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DODAWANIA POZYCJI (Z DRZEWKIEM PROGRESJI) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-white mb-4">
-              {editingExerciseId
-                ? "✏️ Edytuj pozycję"
-                : formData.category === "Muzyka"
-                ? "🎵 Dodaj Playlistę Muzyczną"
-                : "+ Dodaj nowy element"}
-            </h2>
-
-            <form onSubmit={handleSaveExercise} className="space-y-4">
+      {/* TRYB SALI - MOBILNY PEŁNOEKRANOWY */}
+      {activeSessionWorkout && (
+        <div className="fixed inset-0 bg-neutral-950 z-50 p-4 flex flex-col justify-between overflow-y-auto">
+          <div className="max-w-md w-full mx-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">
-                  {formData.category === "Muzyka" ? "Nazwa Playlisty *" : "Nazwa *"}
-                </label>
+                <span className="text-[9px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                  Tryb Sali (W Toku)
+                </span>
+                <h2 className="text-lg font-black text-white mt-0.5">{activeSessionWorkout.title}</h2>
+              </div>
+              <button
+                onClick={() => setActiveSessionWorkout(null)}
+                className="text-neutral-400 hover:text-white text-xs px-2"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 bg-neutral-900/80 border border-neutral-800 p-3 rounded-2xl">
+              <div>
+                <span className="text-[10px] font-bold text-neutral-500 uppercase block">
+                  Czas sesji:
+                </span>
+                <span className="text-2xl font-black font-mono text-emerald-400">
+                  {formatTimerDigits(sessionElapsedTime)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-neutral-500 uppercase block">
+                  Przerwa:
+                </span>
+                {restTimerSeconds !== null ? (
+                  <span className="text-2xl font-black font-mono text-amber-400 animate-pulse">
+                    {formatTimerDigits(restTimerSeconds)}
+                  </span>
+                ) : (
+                  <div className="flex gap-1 pt-1">
+                    {[30, 60, 90].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => handleStartRest(s)}
+                        className="bg-neutral-950 border border-neutral-800 text-[10px] px-1.5 py-0.5 rounded font-mono"
+                      >
+                        +{s}s
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {activeSessionWorkout.exercise_ids.map((exId, idx) => {
+                const ex = exercises.find((e) => e.id === exId);
+                if (!ex) return null;
+                const isChecked = sessionCompletedIds.includes(ex.id);
+
+                return (
+                  <div
+                    key={ex.id}
+                    onClick={() => toggleSessionExerciseCheck(ex.id)}
+                    className={`p-3 rounded-xl border flex items-center justify-between text-xs cursor-pointer ${
+                      isChecked
+                        ? "bg-emerald-950/20 border-emerald-500/40 text-neutral-400"
+                        : "bg-neutral-900/60 border-neutral-800"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-5 h-5 rounded border flex items-center justify-center text-[10px] font-bold ${
+                          isChecked
+                            ? "bg-emerald-500 border-emerald-500 text-black"
+                            : "border-neutral-700 bg-neutral-950"
+                        }`}
+                      >
+                        {isChecked && "✓"}
+                      </div>
+                      <span className={isChecked ? "line-through" : "text-white font-bold"}>
+                        {idx + 1}. {ex.title}
+                      </span>
+                    </div>
+
+                    <Link
+                      href={`/exercise/${ex.id}`}
+                      target="_blank"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[11px] text-emerald-400 shrink-0"
+                    >
+                      Metodyka ↗
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => handlePublishWorkoutToTimeline(activeSessionWorkout, formatTimerDigits(sessionElapsedTime))}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs py-2.5 rounded-xl shadow-lg mt-4"
+            >
+              Zakończ & Wrzuć na Timeline 🏆
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL IMPORTU */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3">
+            <h2 className="text-base font-bold text-white">📥 Importuj Trening</h2>
+            <form onSubmit={handleImportWorkout} className="space-y-3 text-xs">
+              <input
+                type="text"
+                required
+                placeholder="Wklej kod treningu (UUID)..."
+                value={importCode}
+                onChange={(e) => setImportCode(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-3 py-1 text-neutral-400"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-500 text-black font-bold px-4 py-1.5 rounded-xl"
+                >
+                  Zapisz
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LOGOWANIA */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3.5">
+            <h2 className="text-base font-bold text-white">
+              {authMode === "login" ? "🔐 Zaloguj się" : "📝 Rejestracja"}
+            </h2>
+            <form onSubmit={handleAuthSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="text-neutral-400 block mb-1">Nick *</label>
                 <input
                   type="text"
                   required
-                  placeholder={formData.category === "Muzyka" ? "np. Battle Hype Beats 2026" : "np. Corkscrew, B-twist"}
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  placeholder="Twój Nick..."
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-neutral-400 block mb-1">
+                  {authIsCoach ? "PIN Trenera *" : "Hasło *"}
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Hasło..."
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {authMode === "register" && (
                 <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Kategoria</label>
+                  <label className="text-emerald-400 block mb-1 font-semibold">
+                    Kod Drużyny (Kawashi) *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Wpisz kod drużyny..."
+                    value={authTeamCode}
+                    onChange={(e) => setAuthTeamCode(e.target.value)}
+                    className="w-full bg-neutral-950 border border-emerald-500/40 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-0.5">
+                <input
+                  type="checkbox"
+                  id="authCoachMobile"
+                  checked={authIsCoach}
+                  onChange={(e) => setAuthIsCoach(e.target.checked)}
+                  className="rounded border-neutral-800 bg-neutral-950 text-emerald-500"
+                />
+                <label htmlFor="authCoachMobile" className="text-neutral-300">
+                  Trener / Admin
+                </label>
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode(authMode === "login" ? "register" : "login");
+                    setAuthPassword("");
+                    setAuthTeamCode("");
+                  }}
+                  className="text-emerald-400 underline text-xs"
+                >
+                  {authMode === "login" ? "Stwórz konto" : "Mam konto"}
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAuthModalOpen(false)}
+                    className="px-2 py-1 text-neutral-400"
+                  >
+                    Anuluj
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-emerald-500 text-black font-bold px-4 py-1.5 rounded-xl"
+                  >
+                    {authMode === "login" ? "Wejdź" : "Załóż"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DODAWANIA ELEMENTU BAZY */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto space-y-3.5">
+            <h2 className="text-base font-bold text-white">
+              {editingExerciseId ? "✏️ Edytuj Pozycję" : "+ Dodaj do Bazy"}
+            </h2>
+
+            <form onSubmit={handleSaveExercise} className="space-y-3 text-xs">
+              <div>
+                <label className="text-neutral-400 block mb-1">Nazwa *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="np. Cheat 720..."
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-neutral-400 block mb-1">Kategoria</label>
                   <select
                     value={formData.category}
                     onChange={(e) => {
@@ -1907,7 +2062,7 @@ export default function Home() {
                         difficulty: newCat === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
                       });
                     }}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-2 py-1.5 text-xs"
                   >
                     {[...EXERCISE_CATEGORIES, "Muzyka", "Dieta"].map((cat) => (
                       <option key={cat} value={cat}>
@@ -1918,13 +2073,11 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-neutral-400 block mb-1">
-                    {formData.category === "Muzyka" ? "Gatunek muzyki" : "Podkategoria"}
-                  </label>
+                  <label className="text-neutral-400 block mb-1">Podkategoria</label>
                   <select
                     value={formData.subcategory}
                     onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-2 py-1.5 text-xs"
                   >
                     {SUBCATEGORIES_CONFIG[formData.category]
                       ?.filter((s) => !s.startsWith("Wszystkie"))
@@ -1939,11 +2092,11 @@ export default function Home() {
 
               {formData.category !== "Muzyka" && (
                 <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Poziom</label>
+                  <label className="text-neutral-400 block mb-1">Poziom</label>
                   <select
                     value={formData.difficulty}
                     onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-2 py-1.5 text-xs"
                   >
                     {(formData.category === "Tricking"
                       ? TRICKING_LEVELS.filter((l) => !l.startsWith("Wszystkie"))
@@ -1958,51 +2111,44 @@ export default function Home() {
               )}
 
               <div>
-                <label className="text-xs text-emerald-400 block mb-1 font-medium">
-                  {formData.category === "Muzyka" ? "Krótki opis / Klimat playlisty *" : "Krótki opis *"}
-                </label>
+                <label className="text-emerald-400 block mb-1 font-medium">Krótki opis *</label>
                 <input
                   type="text"
                   required
-                  placeholder={formData.category === "Muzyka" ? "np. Szybki beat, idealny pod walki" : "Krótki opis..."}
+                  placeholder="Krótki opis na kafelek..."
                   value={formData.short_description}
                   onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               {formData.category !== "Muzyka" && (
                 <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Wskazówki metodyczne</label>
+                  <label className="text-neutral-400 block mb-1">Metodyka / Technika</label>
                   <textarea
                     rows={2}
-                    placeholder="Technika, błędy..."
+                    placeholder="Wskazówki trenerskie..."
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               )}
 
-              {/* SEKCJA DRZEWKA PROGRESJI W FORMULARZU GŁÓWNYM */}
+              {/* Fundamenty w Drzewku */}
               {formData.category !== "Muzyka" && (
-                <div className="border border-neutral-800 bg-neutral-950/70 p-3.5 rounded-2xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <span>🌳</span> Wymagane fundamenty ({formData.prerequisite_ids.length})
-                    </span>
-                    <span className="text-[10px] text-neutral-500">Wybierz z bazy</span>
-                  </div>
-
+                <div className="border border-neutral-800 bg-neutral-950/70 p-3 rounded-xl space-y-2">
+                  <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                    🌳 Wymagane fundamenty ({formData.prerequisite_ids.length})
+                  </span>
                   <input
                     type="text"
                     placeholder="Szukaj elementu bazowego..."
                     value={formPrereqSearch}
                     onChange={(e) => setFormPrereqSearch(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1 text-xs text-white"
                   />
-
-                  <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                  <div className="max-h-24 overflow-y-auto space-y-1">
                     {exercises
                       .filter(
                         (ex) =>
@@ -2022,13 +2168,13 @@ export default function Home() {
                                   : [...prev.prerequisite_ids, ex.id],
                               }));
                             }}
-                            className={`p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                            className={`p-1.5 rounded-lg text-[11px] flex items-center justify-between cursor-pointer ${
                               isSelected
                                 ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                                : "hover:bg-neutral-900 text-neutral-400 border border-transparent"
+                                : "hover:bg-neutral-900 text-neutral-400"
                             }`}
                           >
-                            <span className="font-semibold">{ex.title}</span>
+                            <span>{ex.title}</span>
                             <span className="text-[10px] text-neutral-500">{ex.difficulty}</span>
                           </div>
                         );
@@ -2037,42 +2183,38 @@ export default function Home() {
                 </div>
               )}
 
-              <div className="space-y-2">
+              {/* Źródła wideo */}
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-emerald-400 font-medium">
-                    {formData.category === "Muzyka"
-                      ? "🔗 Link do Playlisty (Spotify lub YouTube)"
-                      : "🔗 Źródła wideo (YouTube, Shorts, Dysk Google)"}
-                  </label>
+                  <label className="text-emerald-400 font-medium">Link do Wideo</label>
                   {formData.category !== "Muzyka" && (
                     <button
                       type="button"
                       onClick={() => setFormData((p) => ({ ...p, sources: [...p.sources, ""] }))}
-                      className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
+                      className="text-[11px] text-emerald-400 hover:underline"
                     >
-                      + Dodaj kolejne wideo
+                      + Następny link
                     </button>
                   )}
                 </div>
-
                 {formData.sources.map((s, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                  <div key={idx} className="flex items-center gap-1.5">
                     <input
                       type="text"
-                      placeholder={formData.category === "Muzyka" ? "https://open.spotify.com/playlist/..." : `Link wideo #${idx + 1}`}
+                      placeholder={`Link #${idx + 1}`}
                       value={s}
                       onChange={(e) => {
                         const newS = [...formData.sources];
                         newS[idx] = e.target.value;
                         setFormData({ ...formData, sources: newS });
                       }}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
                     />
                     {formData.sources.length > 1 && (
                       <button
                         type="button"
                         onClick={() => setFormData((p) => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
-                        className="text-neutral-500 hover:text-red-400 text-sm px-2 cursor-pointer"
+                        className="text-red-400 px-1"
                       >
                         ✕
                       </button>
@@ -2081,447 +2223,101 @@ export default function Home() {
                 ))}
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white cursor-pointer"
+                  className="px-3 py-1.5 text-neutral-400"
                 >
                   Anuluj
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-5 py-2 rounded-xl text-sm transition-all cursor-pointer"
+                  className="bg-emerald-500 text-black font-bold px-4 py-1.5 rounded-xl"
                 >
-                  {editingExerciseId ? "Zapisz zmiany" : "Dodaj"}
+                  {editingExerciseId ? "Zapisz" : "Dodaj"}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL IMPORTU TRENINGU */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-1">📥 Importuj Trening od Innego Zawodnika</h2>
-            <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-              Wklej kod treningu (UUID), który udostępnił Ci Marek lub inny członek ekipy.
-            </p>
-
-            <form onSubmit={handleImportWorkout} className="space-y-4">
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Kod treningu (UUID) *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="np. 4f3b89a2-..."
-                  value={importCode}
-                  onChange={(e) => setImportCode(e.target.value)}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsImportModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
-                >
-                  Anuluj
-                </button>
-                <button
-                  type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all"
-                >
-                  Zapisz u mnie
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* TRYB SALI */}
-      {activeSessionWorkout && (
-        <div className="fixed inset-0 bg-neutral-950/95 backdrop-blur-md z-50 p-4 md:p-8 flex flex-col justify-between overflow-y-auto">
-          <div className="max-w-3xl w-full mx-auto space-y-6">
-            <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
-                  Tryb Sali (W Toku)
-                </span>
-                <h2 className="text-2xl font-black text-white mt-1">{activeSessionWorkout.title}</h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handlePublishWorkoutToTimeline(activeSessionWorkout, formatTimerDigits(sessionElapsedTime))}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold px-3 py-2 rounded-xl text-xs transition-all cursor-pointer"
-                >
-                  Zakończ & Wrzuć na Timeline 🏆
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm("Zakończyć sesję bez publikacji?")) {
-                      setActiveSessionWorkout(null);
-                    }
-                  }}
-                  className="bg-neutral-900 border border-neutral-800 text-neutral-400 px-3 py-2 rounded-xl text-xs hover:text-white"
-                >
-                  Zamknij ✕
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-neutral-900/80 border border-neutral-800 p-5 rounded-2xl">
-              <div>
-                <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
-                  ⏱️ Czas trwania treningu:
-                </span>
-                <span className="text-3xl font-black font-mono text-emerald-400">
-                  {formatTimerDigits(sessionElapsedTime)}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
-                  ⏳ Timer odpoczynku:
-                </span>
-                {restTimerSeconds !== null ? (
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl font-black font-mono text-amber-400 animate-pulse">
-                      {formatTimerDigits(restTimerSeconds)}
-                    </span>
-                    <button
-                      onClick={() => setRestTimerSeconds(null)}
-                      className="text-xs text-neutral-500 hover:text-white underline cursor-pointer"
-                    >
-                      Anuluj
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 pt-1">
-                    {[30, 60, 90, 120].map((sec) => (
-                      <button
-                        key={sec}
-                        onClick={() => handleStartRest(sec)}
-                        className="bg-neutral-950 hover:bg-emerald-500 hover:text-black border border-neutral-800 text-neutral-300 text-xs px-2.5 py-1 rounded-lg transition-colors font-mono cursor-pointer"
-                      >
-                        +{sec}s
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {activeSessionWorkout.exercise_ids.map((exId, idx) => {
-                const ex = exercises.find((e) => e.id === exId);
-                if (!ex) return null;
-                const isChecked = sessionCompletedIds.includes(ex.id);
-
-                return (
-                  <div
-                    key={ex.id}
-                    onClick={() => toggleSessionExerciseCheck(ex.id)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                      isChecked
-                        ? "bg-emerald-950/20 border-emerald-500/40 text-neutral-300"
-                        : "bg-neutral-900/60 border-neutral-800 hover:border-neutral-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-6 h-6 rounded-lg border flex items-center justify-center text-xs font-bold ${
-                          isChecked
-                            ? "bg-emerald-500 border-emerald-500 text-black"
-                            : "border-neutral-700 bg-neutral-950 text-transparent"
-                        }`}
-                      >
-                        ✓
-                      </div>
-                      <div>
-                        <h4 className={`text-base font-bold ${isChecked ? "line-through text-neutral-500" : "text-white"}`}>
-                          {idx + 1}. {ex.title}
-                        </h4>
-                        <span className="text-xs text-neutral-500">{ex.subcategory || ex.category}</span>
-                      </div>
-                    </div>
-
-                    <Link
-                      href={`/exercise/${ex.id}`}
-                      target="_blank"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-xs text-emerald-400 hover:underline px-3 py-1 bg-neutral-950 rounded-lg border border-neutral-800"
-                    >
-                      Metodyka ↗
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </div>
       )}
 
       {/* KREATOR TRENINGU */}
       {isWorkoutModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-white mb-1">🏋️ Stwórz Własny Trening</h2>
-            <form onSubmit={handleSaveStructuredWorkout} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Nazwa jednostki *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="np. Skoczność + Cheat 720"
-                    value={workoutForm.title}
-                    onChange={(e) => setWorkoutForm({ ...workoutForm, title: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-neutral-400 block mb-1">Poziom intensywności</label>
-                  <select
-                    value={workoutForm.level}
-                    onChange={(e) => setWorkoutForm({ ...workoutForm, level: e.target.value })}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="Wdrożenie / Lekki">Wdrożenie / Lekki</option>
-                    <option value="Średniozaawansowany">Średniozaawansowany</option>
-                    <option value="Wysoka intensywność / PRO">Wysoka intensywność / PRO</option>
-                  </select>
-                </div>
-              </div>
-
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto space-y-3.5">
+            <h2 className="text-base font-bold text-white">🏋️ Nowy Trening</h2>
+            <form onSubmit={handleSaveStructuredWorkout} className="space-y-3 text-xs">
               <div>
-                <label className="text-xs text-neutral-400 block mb-1">Krótki opis jednostki</label>
-                <textarea
-                  rows={2}
-                  placeholder="np. Cel: eksplozywne wybicie z jednej nogi..."
-                  value={workoutForm.description}
-                  onChange={(e) => setWorkoutForm({ ...workoutForm, description: e.target.value })}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                <label className="text-neutral-400 block mb-1">Nazwa *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="np. Trening Mocy..."
+                  value={workoutForm.title}
+                  onChange={(e) => setWorkoutForm({ ...workoutForm, title: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
-                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
-                  🔥 Krok 1: Rozgrzewka & Mobilność ({workoutForm.warmup_ids.length})
-                </span>
-                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                  {exercises
-                    .filter((e) => e.category === "Rozciąganie" || e.subcategory?.includes("Mobilność"))
-                    .map((ex) => (
-                      <div
-                        key={ex.id}
-                        onClick={() => toggleSelectExercise("warmup_ids", ex.id)}
-                        className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer ${
-                          workoutForm.warmup_ids.includes(ex.id)
-                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                            : "hover:bg-neutral-900 text-neutral-400"
-                        }`}
-                      >
-                        <span>{ex.title}</span>
-                        <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
-                      </div>
-                    ))}
-                </div>
+              <div>
+                <label className="text-neutral-400 block mb-1">Opis</label>
+                <textarea
+                  rows={2}
+                  placeholder="Cele jednostki..."
+                  value={workoutForm.description}
+                  onChange={(e) => setWorkoutForm({ ...workoutForm, description: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-emerald-500"
+                />
               </div>
 
-              <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
-                <span className="text-xs font-bold text-sky-400 uppercase tracking-wider block">
-                  ⚡ Krok 2: Wzmocnienie Siła/Plyo ({workoutForm.strength_ids.length})
-                </span>
-                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                  {exercises
-                    .filter((e) => e.category === "Siła" || e.category === "Plyometria")
-                    .map((ex) => (
-                      <div
-                        key={ex.id}
-                        onClick={() => toggleSelectExercise("strength_ids", ex.id)}
-                        className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer ${
-                          workoutForm.strength_ids.includes(ex.id)
-                            ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
-                            : "hover:bg-neutral-900 text-neutral-400"
-                        }`}
-                      >
-                        <span>{ex.title}</span>
-                        <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
-                      </div>
-                    ))}
+              {/* Kroki periodyzacji */}
+              {[
+                { label: "🔥 Rozgrzewka", key: "warmup_ids" as const, cat: "Rozciąganie" },
+                { label: "⚡ Siła / Plyo", key: "strength_ids" as const, cat: "Siła" },
+                { label: "🎯 Tricking", key: "skill_ids" as const, cat: "Tricking" },
+                { label: "🧘 Rozciąganie", key: "cooldown_ids" as const, cat: "Rozciąganie" },
+              ].map(({ label, key, cat }) => (
+                <div key={key} className="border border-neutral-800 bg-neutral-950/60 p-2.5 rounded-xl space-y-1">
+                  <span className="text-[11px] font-bold text-neutral-300 block">
+                    {label} ({workoutForm[key].length})
+                  </span>
+                  <div className="max-h-20 overflow-y-auto space-y-1">
+                    {exercises
+                      .filter((e) => e.category === cat || (cat === "Siła" && e.category === "Plyometria"))
+                      .map((ex) => (
+                        <div
+                          key={ex.id}
+                          onClick={() => toggleSelectExercise(key, ex.id)}
+                          className={`p-1.5 rounded-lg text-[11px] flex items-center justify-between cursor-pointer ${
+                            workoutForm[key].includes(ex.id)
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                              : "hover:bg-neutral-900 text-neutral-400"
+                          }`}
+                        >
+                          <span>{ex.title}</span>
+                          <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
+                        </div>
+                      ))}
+                  </div>
                 </div>
-              </div>
+              ))}
 
-              <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
-                  🎯 Krok 3: Tricking & Skill ({workoutForm.skill_ids.length})
-                </span>
-                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                  {exercises
-                    .filter((e) => e.category === "Tricking")
-                    .map((ex) => (
-                      <div
-                        key={ex.id}
-                        onClick={() => toggleSelectExercise("skill_ids", ex.id)}
-                        className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer ${
-                          workoutForm.skill_ids.includes(ex.id)
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                            : "hover:bg-neutral-900 text-neutral-400"
-                        }`}
-                      >
-                        <span>{ex.title}</span>
-                        <span className="text-[10px] text-neutral-500">{ex.difficulty}</span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              <div className="border border-neutral-800 bg-neutral-950/60 rounded-2xl p-3.5 space-y-2">
-                <span className="text-xs font-bold text-teal-400 uppercase tracking-wider block">
-                  🧘 Krok 4: Rozciąganie & Cool-down ({workoutForm.cooldown_ids.length})
-                </span>
-                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                  {exercises
-                    .filter((e) => e.category === "Rozciąganie")
-                    .map((ex) => (
-                      <div
-                        key={ex.id}
-                        onClick={() => toggleSelectExercise("cooldown_ids", ex.id)}
-                        className={`p-2 rounded-lg text-xs flex items-center justify-between cursor-pointer ${
-                          workoutForm.cooldown_ids.includes(ex.id)
-                            ? "bg-teal-500/20 text-teal-300 border border-teal-500/40"
-                            : "hover:bg-neutral-900 text-neutral-400"
-                        }`}
-                      >
-                        <span>{ex.title}</span>
-                        <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800">
                 <button
                   type="button"
                   onClick={() => setIsWorkoutModalOpen(false)}
-                  className="px-4 py-2 text-sm text-neutral-400 hover:text-white"
+                  className="px-3 py-1 text-neutral-400"
                 >
                   Anuluj
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-5 py-2 rounded-xl text-sm transition-all"
+                  className="bg-emerald-500 text-black font-bold px-4 py-1.5 rounded-xl"
                 >
-                  Zapisz Trening
+                  Zapisz
                 </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL LOGOWANIA I REJESTRACJI */}
-      {isAuthModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-1">
-              {authMode === "login" ? "🔐 Zaloguj się" : "📝 Stwórz konto zawodnika"}
-            </h2>
-            <p className="text-xs text-neutral-400 mb-4">
-              {authMode === "login"
-                ? "Wpisz swój nick i własne hasło."
-                : "Wymyśl nick, własne hasło i podaj kod klubu."}
-            </p>
-
-            <form onSubmit={handleAuthSubmit} className="space-y-3.5">
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">Twój Nick *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="np. Piotrek, Tricker99"
-                  value={authUsername}
-                  onChange={(e) => setAuthUsername(e.target.value)}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-neutral-400 block mb-1">
-                  {authIsCoach ? "PIN Trenera *" : authMode === "register" ? "Twoje Własne Hasło *" : "Hasło *"}
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder={authIsCoach ? "PIN Trenera..." : "Twoje hasło..."}
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              {authMode === "register" && (
-                <div>
-                  <label className="text-xs text-emerald-400 font-semibold block mb-1">
-                    Kod Dostępu Drużyny (Kawashi) *
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Wpisz kod drużyny..."
-                    value={authTeamCode}
-                    onChange={(e) => setAuthTeamCode(e.target.value)}
-                    className="w-full bg-neutral-950 border border-emerald-500/40 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="authCoach"
-                  checked={authIsCoach}
-                  onChange={(e) => setAuthIsCoach(e.target.checked)}
-                  className="rounded border-neutral-800 bg-neutral-950 text-emerald-500 focus:ring-0 cursor-pointer"
-                />
-                <label htmlFor="authCoach" className="text-xs text-neutral-300 cursor-pointer select-none">
-                  Konto Trenera / Admina
-                </label>
-              </div>
-
-              <div className="flex justify-between items-center pt-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode(authMode === "login" ? "register" : "login");
-                    setAuthPassword("");
-                    setAuthTeamCode("");
-                  }}
-                  className="text-xs text-emerald-400 hover:underline cursor-pointer"
-                >
-                  {authMode === "login" ? "Nie masz konta? Stwórz" : "Masz już konto? Zaloguj"}
-                </button>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsAuthModalOpen(false)}
-                    className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white cursor-pointer"
-                  >
-                    Anuluj
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-4 py-1.5 rounded-xl text-xs transition-all cursor-pointer"
-                  >
-                    {authMode === "login" ? "Wejdź" : "Załóż"}
-                  </button>
-                </div>
               </div>
             </form>
           </div>
