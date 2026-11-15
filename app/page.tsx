@@ -113,7 +113,7 @@ const STANDARD_DIFFICULTIES = [
 const TOUR_STEPS = [
   {
     targetId: "tour-header",
-    title: "Centrum Dowodzenia ROAD TO GOAT 🥋",
+    title: "Centrum Dowodzenia ROAD TO GOAT",
     desc: "Witaj na platformie! Przeprowadzimy Cię bezpośrednio przez kluczowe elementy interfejsu.",
     position: "bottom" as const,
   },
@@ -196,7 +196,6 @@ export default function Home() {
   const [authTeamCode, setAuthTeamCode] = useState("");
   const [authIsCoach, setAuthIsCoach] = useState(false);
 
-  // Zawody
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [isCompManagerOpen, setIsCompManagerOpen] = useState(false);
   const [editingCompId, setEditingCompId] = useState<string | null>(null);
@@ -241,7 +240,7 @@ export default function Home() {
   const [formPrereqSearch, setFormPrereqSearch] = useState("");
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (exerciseDropdownRef.current && !exerciseDropdownRef.current.contains(event.target as Node)) {
         setIsExerciseDropdownOpen(false);
       }
@@ -250,7 +249,11 @@ export default function Home() {
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
   }, []);
 
   useEffect(() => {
@@ -960,7 +963,7 @@ export default function Home() {
               </span>
               <button
                 onClick={closeTutorial}
-                className="text-neutral-500 hover:text-white text-xs px-2 py-1"
+                className="text-neutral-500 hover:text-white text-xs px-2"
               >
                 Pomiń ✕
               </button>
@@ -1000,14 +1003,14 @@ export default function Home() {
         </div>
       )}
 
-      {/* HERO BANNER - RESPONSYWNY */}
+      {/* SEKCJA HERO BANNER */}
       <section className="relative w-full border-b border-neutral-800/80 bg-neutral-950 overflow-hidden select-none">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {heroImages.map((src, idx) => (
             <div
               key={idx}
               className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                idx === currentHeroIdx ? "opacity-70" : "opacity-0"
+                idx === currentHeroIdx ? "opacity-60 md:opacity-75" : "opacity-0"
               }`}
             >
               <img
@@ -1017,78 +1020,69 @@ export default function Home() {
               />
             </div>
           ))}
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/75 to-neutral-950/40" />
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/70 to-neutral-950/40" />
         </div>
 
-        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-8 flex flex-col justify-between min-h-[440px] md:min-h-[520px]">
-          {/* TOP BAR NA TELEFONIE */}
-          <div className="flex items-center justify-between gap-2 w-full">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xl">🥋</span>
-              <span className="text-xs md:text-sm font-black tracking-tight text-emerald-400 uppercase">
-                ROAD TO GOAT
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Link
-                id="tour-timeline-btn"
-                href="/timeline"
-                className="relative flex items-center gap-1.5 bg-neutral-900/90 border border-neutral-700 hover:border-emerald-500/60 rounded-xl px-2.5 py-1.5 text-xs font-semibold"
-              >
-                <span>🎬</span>
-                <span className="hidden sm:inline">Timeline</span>
-                {currentUser && hasNewTimelinePosts && (
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                  </span>
-                )}
-              </Link>
-
-              {!currentUser ? (
-                <button
-                  onClick={() => {
-                    setAuthMode("login");
-                    setIsAuthModalOpen(true);
-                  }}
-                  className="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700 text-xs px-3 py-1.5 rounded-xl text-neutral-200 transition-all cursor-pointer font-medium"
-                >
-                  👤 Wejdź
-                </button>
-              ) : (
-                <div className="flex items-center gap-1.5 bg-neutral-900/90 border border-neutral-700/80 p-1 rounded-xl">
-                  <Link
-                    href="/profile"
-                    className="text-xs text-emerald-400 font-bold px-2 py-1 bg-neutral-950/80 border border-neutral-800 rounded-lg truncate max-w-[110px]"
-                  >
-                    👤 {currentUser.username}
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="bg-neutral-900 hover:bg-red-950/60 border border-neutral-800 text-[11px] px-2 py-1 rounded-lg text-neutral-400 hover:text-red-300 transition-all font-medium"
-                  >
-                    Wyloguj
-                  </button>
-                </div>
+        <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-6 flex flex-col justify-between min-h-[300px] md:min-h-[500px]">
+          {/* GÓRNY PASEK */}
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Link
+              id="tour-timeline-btn"
+              href="/timeline"
+              className="relative flex items-center gap-1.5 bg-neutral-900/90 border border-neutral-700/80 hover:border-emerald-500/60 rounded-xl px-3 py-1.5 text-xs font-semibold"
+            >
+              <span>🎬</span>
+              <span>Timeline</span>
+              {currentUser && hasNewTimelinePosts && (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                </span>
               )}
-            </div>
+            </Link>
+
+            {!currentUser ? (
+              <button
+                onClick={() => {
+                  setAuthMode("login");
+                  setIsAuthModalOpen(true);
+                }}
+                className="bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700 text-xs px-3.5 py-1.5 rounded-xl text-neutral-200 transition-all cursor-pointer font-medium"
+              >
+                👤 Zaloguj
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 bg-neutral-900/90 border border-neutral-700/80 p-1 rounded-xl">
+                <Link
+                  href="/profile"
+                  className="text-xs text-emerald-400 font-bold px-2 py-1 bg-neutral-950/80 border border-neutral-800 rounded-lg truncate max-w-[120px]"
+                >
+                  👤 {currentUser.username}
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="bg-neutral-900 hover:bg-red-950/60 border border-neutral-800 text-[11px] px-2 py-1 rounded-lg text-neutral-400 hover:text-red-300 transition-all font-medium"
+                >
+                  Wyloguj
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* GŁÓWNA TREŚĆ HERO */}
-          <div className="my-auto py-5 grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
-            <div id="tour-header" className="lg:col-span-2 space-y-2">
+          {/* DÓŁ SEKCJI HERO: TYTUŁ I OPIS W LEWYM DOLNYM ROGU */}
+          <div className="mt-auto pt-6 pb-2 grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
+            <div id="tour-header" className="lg:col-span-2 space-y-2 text-left">
               <div className="inline-block bg-neutral-900/85 backdrop-blur-md border border-neutral-700/80 rounded-2xl px-4 py-2 shadow-lg">
                 <h1 className="text-2xl md:text-5xl font-black tracking-tight text-emerald-400 uppercase">
                   ROAD TO GOAT
                 </h1>
               </div>
-              <p className="text-neutral-200 text-xs md:text-sm max-w-xl leading-relaxed drop-shadow bg-neutral-950/60 p-3 rounded-xl backdrop-blur-sm border border-neutral-800/40">
+              <p className="text-neutral-200 text-xs md:text-sm max-w-xl leading-relaxed drop-shadow bg-neutral-950/60 p-3 rounded-xl backdrop-blur-sm border border-neutral-800/40 text-left">
                 Szukasz pomysłu na trening, odblokowujesz nowy trick, a może celujesz w szczyt formy na zawody? Otrzymujesz strukturę, by krok po kroku osiągnąć wyznaczony poziom.
               </p>
 
               {currentUser && recommendedSkill && (
-                <div className="inline-flex flex-wrap items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 p-2.5 rounded-xl backdrop-blur-md">
+                <div className="inline-flex flex-wrap items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 p-2 rounded-xl backdrop-blur-md">
                   <span className="text-xs text-neutral-200">
                     🎯 Następny krok: <strong className="text-emerald-300">{recommendedSkill.title}</strong>
                   </span>
@@ -1102,12 +1096,12 @@ export default function Home() {
               )}
             </div>
 
-            {/* KAFELEK ZAWODÓW NA TELEFONIE */}
+            {/* KAFELEK ZAWODÓW */}
             {currentUser && (
               <div
                 id="tour-competition-widget"
                 onClick={() => setIsCompManagerOpen(true)}
-                className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 hover:border-emerald-500/50 rounded-2xl p-3.5 shadow-xl cursor-pointer transition-all"
+                className="bg-neutral-900/90 backdrop-blur-md border border-neutral-800 hover:border-emerald-500/50 rounded-2xl p-3.5 shadow-xl cursor-pointer transition-all text-left"
               >
                 <div className="flex items-center justify-between border-b border-neutral-800/80 pb-1.5 mb-2">
                   <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
@@ -1149,7 +1143,7 @@ export default function Home() {
             )}
           </div>
 
-          {/* PRZYCISKI AKCJI - RESPONSYWNY PASEK */}
+          {/* PRZYCISKI AKCJI */}
           <div className="relative z-30 flex flex-wrap items-center justify-between gap-2 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -1236,37 +1230,39 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PASEK ZAKŁADEK I WYSZUKIWARKA - PRZYJAZNE DLA TELEFONU */}
+      {/* PASEK ZAKŁADEK I WYSZUKIWARKA */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-5 space-y-4">
-        {/* Poziomo przewijany pasek kategorii głównych */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none select-none border-b border-neutral-900">
-          <div className="relative shrink-0" ref={exerciseDropdownRef} id="tour-exercise-base">
+        {/* Bez overflow-x-auto na tym pasku, aby dropdown Bazy nie był obcinany w pionie */}
+        <div className="relative z-20 flex flex-wrap items-center gap-2 pb-2 select-none border-b border-neutral-900">
+          <div className="relative" ref={exerciseDropdownRef} id="tour-exercise-base">
             <button
-              onClick={() => setIsExerciseDropdownOpen(!isExerciseDropdownOpen)}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+              type="button"
+              onClick={() => setIsExerciseDropdownOpen((prev) => !prev)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 isExerciseCategoryActive
                   ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                  : "bg-neutral-900 text-neutral-300 border border-neutral-800"
+                  : "bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800"
               }`}
             >
               <span>📚 Baza</span>
-              <span className="text-[10px] opacity-75">
-                {isExerciseCategoryActive ? `(${activeCategory})` : "▾"}
+              <span className="text-[10px] opacity-80 font-extrabold">
+                {isExerciseCategoryActive ? `(${activeCategory}) ▾` : "▾"}
               </span>
             </button>
 
             {isExerciseDropdownOpen && (
-              <div className="absolute left-0 mt-2 w-44 bg-neutral-900 border border-neutral-800 rounded-2xl p-1.5 shadow-2xl z-40 space-y-1">
+              <div className="absolute left-0 top-full mt-2 w-48 bg-neutral-900 border border-neutral-700 rounded-2xl p-1.5 shadow-2xl z-50 space-y-1">
                 {EXERCISE_CATEGORIES.map((cat) => (
                   <button
                     key={cat}
+                    type="button"
                     onClick={() => {
                       setActiveCategory(cat);
                       setActiveSubcategory(SUBCATEGORIES_CONFIG[cat][0]);
                       setActiveTrickingLevel("Wszystkie poziomy");
                       setIsExerciseDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold ${
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
                       activeCategory === cat
                         ? "bg-emerald-500/20 text-emerald-400 font-bold"
                         : "text-neutral-300 hover:bg-neutral-800"
@@ -1280,28 +1276,32 @@ export default function Home() {
           </div>
 
           <button
+            type="button"
             onClick={() => {
               setActiveCategory("Muzyka");
               setActiveSubcategory(SUBCATEGORIES_CONFIG["Muzyka"][0]);
+              setIsExerciseDropdownOpen(false);
             }}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               activeCategory === "Muzyka"
                 ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                : "bg-neutral-900 text-neutral-400 border border-neutral-800"
+                : "bg-neutral-900 hover:bg-neutral-800 text-neutral-400 border border-neutral-800"
             }`}
           >
             🎵 Muzyka
           </button>
 
           <button
+            type="button"
             onClick={() => {
               setActiveCategory("Dieta");
               setActiveSubcategory(SUBCATEGORIES_CONFIG["Dieta"][0]);
+              setIsExerciseDropdownOpen(false);
             }}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               activeCategory === "Dieta"
                 ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                : "bg-neutral-900 text-neutral-400 border border-neutral-800"
+                : "bg-neutral-900 hover:bg-neutral-800 text-neutral-400 border border-neutral-800"
             }`}
           >
             🥗 Dieta
@@ -1309,14 +1309,16 @@ export default function Home() {
 
           {currentUser && (
             <button
+              type="button"
               onClick={() => {
                 setActiveCategory("Własne treningi");
                 setActiveSubcategory(SUBCATEGORIES_CONFIG["Własne treningi"][0]);
+                setIsExerciseDropdownOpen(false);
               }}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 activeCategory === "Własne treningi"
                   ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
-                  : "bg-neutral-900 text-neutral-400 border border-neutral-800"
+                  : "bg-neutral-900 hover:bg-neutral-800 text-neutral-400 border border-neutral-800"
               }`}
             >
               📋 Treningi
@@ -1324,17 +1326,19 @@ export default function Home() {
           )}
         </div>
 
-        {/* Wyszukiwarka */}
-        <input
-          type="text"
-          placeholder="Szukaj tricku, ćwiczenia, elementu..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs md:text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-        />
+        {/* WYSZUKIWARKA (Ukryta dla Diety w trybie Work in Progress) */}
+        {activeCategory !== "Dieta" && (
+          <input
+            type="text"
+            placeholder="Szukaj tricku, ćwiczenia, elementu..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs md:text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+          />
+        )}
 
-        {/* Podkategorie - płynny poziomy scroll na telefonie */}
-        {activeCategory !== "Własne treningi" && (
+        {/* PODKATEGORIE */}
+        {activeCategory !== "Własne treningi" && activeCategory !== "Dieta" && (
           <div className="space-y-2 select-none">
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
               {SUBCATEGORIES_CONFIG[activeCategory]?.map((sub) => (
@@ -1369,6 +1373,26 @@ export default function Home() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* SEKCJA DIETA: WORK IN PROGRESS */}
+        {activeCategory === "Dieta" && (
+          <div className="py-16 px-4 text-center border border-neutral-800/80 bg-neutral-900/40 rounded-3xl space-y-3 my-4">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-2xl">
+              🚧
+            </div>
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400 bg-amber-950/50 border border-amber-800/60 px-2.5 py-0.5 rounded-full">
+                Moduł w budowie
+              </span>
+              <h2 className="text-xl md:text-2xl font-black text-white pt-1">
+                Work in Progress
+              </h2>
+            </div>
+            <p className="text-neutral-400 text-xs md:text-sm max-w-md mx-auto leading-relaxed">
+              Sekcja żywienia, nawodnienia, elektrolitów i regeneracji około-treningowej jest obecnie w przygotowaniu. Wkrótce pojawią się tu konkretne wskazówki pod obciążenia akrobatyczne.
+            </p>
           </div>
         )}
 
@@ -1408,7 +1432,7 @@ export default function Home() {
                   return (
                     <div
                       key={wo.id}
-                      className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4 space-y-3"
+                      className="bg-neutral-900/60 border border-neutral-800 rounded-2xl p-4 space-y-3 text-left"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800">
@@ -1476,8 +1500,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* LISTA ĆWICZEŃ W BAZIE - RESPONSYWNE KARTY */}
-        {activeCategory !== "Własne treningi" && (
+        {/* LISTA ĆWICZEŃ W BAZIE */}
+        {activeCategory !== "Własne treningi" && activeCategory !== "Dieta" && (
           loading ? (
             <div className="text-center py-12 text-neutral-500 text-xs animate-pulse">
               Ładowanie bazy...
@@ -1498,7 +1522,7 @@ export default function Home() {
                   <div
                     key={item.id}
                     onClick={() => toggleExpand(item.id)}
-                    className={`border rounded-2xl p-4 transition-all duration-300 select-none cursor-pointer flex flex-col justify-between ${
+                    className={`border rounded-2xl p-4 transition-all duration-300 select-none cursor-pointer flex flex-col justify-between text-left ${
                       isMastered
                         ? "bg-emerald-950/20 border-emerald-500/60 shadow-md"
                         : isExpanded
@@ -1634,7 +1658,7 @@ export default function Home() {
       {/* MODAL ZARZĄDZANIA ZAWODAMI */}
       {isCompManagerOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto space-y-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto space-y-4 text-left">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
               <h2 className="text-base font-bold text-white flex items-center gap-1.5">
                 <span>🏆</span> Zawody ({competitions.length})
@@ -1765,7 +1789,7 @@ export default function Home() {
       {/* MODAL REKOMENDACJI ASYSTENTA */}
       {showRecommendationModal && recommendedSkill && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
-          <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3">
+          <div className="bg-neutral-900 border border-emerald-500/50 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3 text-left">
             <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
               Rekomendacja z Drzewka
             </span>
@@ -1791,9 +1815,9 @@ export default function Home() {
         </div>
       )}
 
-      {/* TRYB SALI - MOBILNY PEŁNOEKRANOWY */}
+      {/* TRYB SALI - MOBILNY */}
       {activeSessionWorkout && (
-        <div className="fixed inset-0 bg-neutral-950 z-50 p-4 flex flex-col justify-between overflow-y-auto">
+        <div className="fixed inset-0 bg-neutral-950 z-50 p-4 flex flex-col justify-between overflow-y-auto text-left">
           <div className="max-w-md w-full mx-auto space-y-4">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div>
@@ -1900,7 +1924,7 @@ export default function Home() {
       {/* MODAL IMPORTU */}
       {isImportModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3 text-left">
             <h2 className="text-base font-bold text-white">📥 Importuj Trening</h2>
             <form onSubmit={handleImportWorkout} className="space-y-3 text-xs">
               <input
@@ -1934,7 +1958,7 @@ export default function Home() {
       {/* MODAL LOGOWANIA */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3.5">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-3.5 text-left">
             <h2 className="text-base font-bold text-white">
               {authMode === "login" ? "🔐 Zaloguj się" : "📝 Rejestracja"}
             </h2>
@@ -2030,7 +2054,7 @@ export default function Home() {
       {/* MODAL DODAWANIA ELEMENTU BAZY */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto space-y-3.5">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto space-y-3.5 text-left">
             <h2 className="text-base font-bold text-white">
               {editingExerciseId ? "✏️ Edytuj Pozycję" : "+ Dodaj do Bazy"}
             </h2>
@@ -2135,7 +2159,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Fundamenty w Drzewku */}
               {formData.category !== "Muzyka" && (
                 <div className="border border-neutral-800 bg-neutral-950/70 p-3 rounded-xl space-y-2">
                   <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
@@ -2183,7 +2206,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Źródła wideo */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-emerald-400 font-medium">Link do Wideo</label>
@@ -2246,7 +2268,7 @@ export default function Home() {
       {/* KREATOR TRENINGU */}
       {isWorkoutModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto space-y-3.5">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto space-y-3.5 text-left">
             <h2 className="text-base font-bold text-white">🏋️ Nowy Trening</h2>
             <form onSubmit={handleSaveStructuredWorkout} className="space-y-3 text-xs">
               <div>
@@ -2272,7 +2294,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* Kroki periodyzacji */}
               {[
                 { label: "🔥 Rozgrzewka", key: "warmup_ids" as const, cat: "Rozciąganie" },
                 { label: "⚡ Siła / Plyo", key: "strength_ids" as const, cat: "Siła" },
