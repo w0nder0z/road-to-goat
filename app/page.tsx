@@ -15,6 +15,7 @@ interface Exercise {
   title: string;
   category: string;
   subcategory?: string;
+  equipment?: string;
   difficulty: string;
   short_description: string;
   description?: string;
@@ -54,6 +55,7 @@ interface Challenge {
 
 const EXERCISE_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie"];
 
+// 12 partii mięśniowych zgodnych z JEFIT + dotychczasowe kategorie
 const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
   Tricking: [
     "Wszystkie podkategorie",
@@ -72,10 +74,17 @@ const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
   ],
   Siła: [
     "Wszystkie partie",
-    "Dolne partie (Nogi / Pośladki)",
-    "Górne partie (Klatka / Plecy / Barki)",
-    "Core / Antyrotacja",
-    "Siła chwytu i ramion",
+    "Abs (Brzuch)",
+    "Back (Plecy)",
+    "Biceps",
+    "Cardio",
+    "Chest (Klatka)",
+    "Forearms (Przedramiona)",
+    "Glutes (Pośladki)",
+    "Shoulders (Barki)",
+    "Triceps",
+    "Upper Legs (Uda)",
+    "Lower Legs (Łydki)",
   ],
   Rozciąganie: [
     "Wszystkie partie",
@@ -102,6 +111,23 @@ const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
     "Regeneracja & Mobility",
   ],
 };
+
+// 12 kategorii sprzętu z JEFIT
+const EQUIPMENT_LIST = [
+  "Wszystki sprzęt",
+  "Body Weight (Masa ciała)",
+  "Bands (Gumy)",
+  "Barbell (Sztanga)",
+  "Bench (Ławka)",
+  "Dumbbell (Hantle)",
+  "Exercise Ball (Piłka)",
+  "EZ Curl Bar (Gryf łamany)",
+  "Kettlebell",
+  "Cardio Machine",
+  "Strength Machine (Maszyny)",
+  "Pullup Bar (Drążek)",
+  "Weight Plate (Talerz)",
+];
 
 const TRICKING_LEVELS = [
   "Wszystkie poziomy",
@@ -173,6 +199,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("Tricking");
   const [activeSubcategory, setActiveSubcategory] = useState("Wszystkie podkategorie");
+  const [activeEquipment, setActiveEquipment] = useState("Wszystki sprzęt");
   const [activeTrickingLevel, setActiveTrickingLevel] = useState("Wszystkie poziomy");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -257,6 +284,7 @@ export default function Home() {
     title: "",
     category: "Tricking",
     subcategory: "Vertical Kicks (Pop, Cheat, Swing)",
+    equipment: "Body Weight (Masa ciała)",
     difficulty: "Lvl 1: Fundamenty",
     short_description: "",
     description: "",
@@ -342,7 +370,9 @@ export default function Home() {
     setLoading(true);
     const { data: exData } = await supabase
       .from("exercises")
-      .select("id, title, category, subcategory, difficulty, short_description, description, video_url, sources, prerequisite_ids")
+      .select(
+        "id, title, category, subcategory, equipment, difficulty, short_description, description, video_url, sources, prerequisite_ids"
+      )
       .order("created_at", { ascending: false });
 
     if (exData) setExercises(exData);
@@ -752,7 +782,6 @@ export default function Home() {
     setChallengeFile(file);
   };
 
-  // Zapisywanie nowego Wyzwania przez Cloudinary
   const handleSaveChallenge = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !challengeForm.title.trim()) return;
@@ -831,6 +860,7 @@ export default function Home() {
       title: formData.title,
       category: formData.category,
       subcategory: formData.subcategory,
+      equipment: formData.category === "Siła" ? formData.equipment : null,
       difficulty: formData.category === "Muzyka" ? "Playlista" : formData.difficulty,
       short_description: formData.short_description,
       description: formData.category === "Muzyka" ? "" : (formData.description || formData.short_description),
@@ -1012,12 +1042,19 @@ export default function Home() {
 
       const matchesSearch =
         item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.short_description?.toLowerCase().includes(searchTerm.toLowerCase());
+        item.short_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.equipment?.toLowerCase().includes(searchTerm.toLowerCase());
       if (!matchesSearch) return false;
 
       const isAllSub = activeSubcategory.startsWith("Wszystkie");
       if (!isAllSub && item.subcategory && item.subcategory !== activeSubcategory) {
         return false;
+      }
+
+      if (activeCategory === "Siła" && activeEquipment !== "Wszystki sprzęt") {
+        if (item.equipment !== activeEquipment) {
+          return false;
+        }
       }
 
       if (activeCategory === "Tricking" && activeTrickingLevel !== "Wszystkie poziomy") {
@@ -1043,7 +1080,7 @@ export default function Home() {
 
       return 0;
     });
-  }, [exercises, activeCategory, activeSubcategory, activeTrickingLevel, searchTerm]);
+  }, [exercises, activeCategory, activeSubcategory, activeEquipment, activeTrickingLevel, searchTerm]);
 
   const filteredChallenges = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -1289,6 +1326,7 @@ export default function Home() {
                       title: "",
                       category: baseCat,
                       subcategory: SUBCATEGORIES_CONFIG[baseCat]?.[1] || "",
+                      equipment: EQUIPMENT_LIST[1],
                       difficulty: baseCat === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
                       short_description: "",
                       description: "",
@@ -1407,6 +1445,7 @@ export default function Home() {
                     onClick={() => {
                       setActiveCategory(cat);
                       setActiveSubcategory(SUBCATEGORIES_CONFIG[cat][0]);
+                      setActiveEquipment("Wszystki sprzęt");
                       setActiveTrickingLevel("Wszystkie poziomy");
                       setIsExerciseDropdownOpen(false);
                     }}
@@ -1495,6 +1534,8 @@ export default function Home() {
             placeholder={
               activeCategory === "Wyzwania"
                 ? "Szukaj wyzwania, kombinacji lub autora..."
+                : activeCategory === "Siła"
+                ? "Szukaj ćwiczenia siłowego, partii mięśniowej lub sprzętu (np. Barbell, Kettlebell)..."
                 : "Szukaj tricku, ćwiczenia, elementu..."
             }
             value={searchTerm}
@@ -1503,11 +1544,12 @@ export default function Home() {
           />
         )}
 
-        {/* PODKATEGORIE */}
+        {/* PODKATEGORIE (12 PARTII MIĘŚNIOWYCH) I FILTR SPRZĘTU (12 KATEGORII) */}
         {activeCategory !== "Własne treningi" &&
           activeCategory !== "Dieta" &&
           activeCategory !== "Wyzwania" && (
             <div className="space-y-2 select-none">
+              {/* Pasek 1: Partie mięśniowe / Podkategorie */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                 {SUBCATEGORIES_CONFIG[activeCategory]?.map((sub) => (
                   <button
@@ -1524,6 +1566,26 @@ export default function Home() {
                 ))}
               </div>
 
+              {/* Pasek 2 dla Siły: 12 kategorii sprzętu z JEFIT */}
+              {activeCategory === "Siła" && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  {EQUIPMENT_LIST.map((eq) => (
+                    <button
+                      key={eq}
+                      onClick={() => setActiveEquipment(eq)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-all shrink-0 ${
+                        activeEquipment === eq
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 font-bold"
+                          : "bg-neutral-900/40 text-neutral-500 border border-neutral-900 hover:text-neutral-300"
+                      }`}
+                    >
+                      🏋️ {eq}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Pasek 2 dla Trickingu: Poziomy trudności */}
               {activeCategory === "Tricking" && (
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                   {TRICKING_LEVELS.map((lvl) => (
@@ -1611,7 +1673,6 @@ export default function Home() {
 
                         <h3 className="text-base md:text-lg font-black text-white">{ch.title}</h3>
 
-                        {/* SEKWENCJA TRICKÓW W WYZWANIU */}
                         {ch.exercise_sequence && ch.exercise_sequence.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1.5 bg-neutral-950/80 border border-neutral-800 p-2.5 rounded-xl">
                             {ch.exercise_sequence.map((step, idx) => (
@@ -1636,7 +1697,6 @@ export default function Home() {
                           </p>
                         )}
 
-                        {/* WIDEO POKAZOWE WYZWANIA */}
                         {ch.video_url && (
                           <div className="rounded-2xl overflow-hidden border border-neutral-800 bg-black">
                             {isDirectVideoUrl(ch.video_url) ? (
@@ -1834,8 +1894,8 @@ export default function Home() {
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-1.5 mb-2.5">
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[160px]">
+                      <div className="flex items-center justify-between gap-1.5 mb-2">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[170px]">
                           {item.subcategory || item.category}
                         </span>
                         <div className="flex items-center gap-1.5">
@@ -1847,6 +1907,14 @@ export default function Home() {
                           </span>
                         </div>
                       </div>
+
+                      {item.equipment && item.category === "Siła" && (
+                        <div className="mb-2">
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-neutral-950 text-amber-300/90 border border-neutral-800 inline-block">
+                            🏋️ {item.equipment}
+                          </span>
+                        </div>
+                      )}
 
                       <div className="flex items-start justify-between gap-2">
                         <h3 className={`text-base font-bold ${isMastered ? "text-emerald-300" : "text-white"}`}>
@@ -1908,6 +1976,7 @@ export default function Home() {
                                     title: item.title,
                                     category: item.category,
                                     subcategory: item.subcategory || SUBCATEGORIES_CONFIG[item.category][1] || "",
+                                    equipment: item.equipment || EQUIPMENT_LIST[1],
                                     difficulty: item.difficulty,
                                     short_description: item.short_description || "",
                                     description: item.description || "",
@@ -1984,7 +2053,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* UKŁADANIE SEKWENCJI TRICKÓW Z WYSZUKIWARKĄ */}
               <div className="border border-neutral-800 bg-neutral-950/70 p-3 rounded-2xl space-y-2">
                 <label className="text-amber-300 font-bold block">
                   1. Elementy wyzwania po kolei ({challengeForm.sequence.length})
@@ -2050,7 +2118,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* WIDEO POKAZOWE */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-neutral-400 font-semibold">2. Wideo pokazowe *</label>
@@ -2559,7 +2626,7 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="np. Cheat 720..."
+                  placeholder="np. Cheat 720 lub Barbell Back Squat..."
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
@@ -2591,7 +2658,9 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="text-neutral-400 block mb-1">Podkategoria</label>
+                  <label className="text-neutral-400 block mb-1">
+                    {formData.category === "Siła" ? "Partia mięśniowa (12)" : "Podkategoria"}
+                  </label>
                   <select
                     value={formData.subcategory}
                     onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
@@ -2607,6 +2676,25 @@ export default function Home() {
                   </select>
                 </div>
               </div>
+
+              {formData.category === "Siła" && (
+                <div>
+                  <label className="text-amber-300 block mb-1 font-medium">
+                    🏋️ Wymagany sprzęt (12 kategorii)
+                  </label>
+                  <select
+                    value={formData.equipment}
+                    onChange={(e) => setFormData({ ...formData, equipment: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-2 py-1.5 text-xs"
+                  >
+                    {EQUIPMENT_LIST.filter((eq) => eq !== "Wszystki sprzęt").map((eq) => (
+                      <option key={eq} value={eq}>
+                        {eq}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {formData.category !== "Muzyka" && (
                 <div>
@@ -2644,8 +2732,8 @@ export default function Home() {
                 <div>
                   <label className="text-neutral-400 block mb-1">Metodyka / Technika</label>
                   <textarea
-                    rows={2}
-                    placeholder="Wskazówki trenerskie..."
+                    rows={3}
+                    placeholder="POZYCJA WYJŚCIOWA: ... WYKONANIE: ... WSKAZÓWKI: ..."
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
@@ -2770,7 +2858,7 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="np. Trening Mocy..."
+                  placeholder="np. Trening Mocy + Cork..."
                   value={workoutForm.title}
                   onChange={(e) => setWorkoutForm({ ...workoutForm, title: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
@@ -2798,7 +2886,7 @@ export default function Home() {
                   <span className="text-[11px] font-bold text-neutral-300 block">
                     {label} ({workoutForm[key].length})
                   </span>
-                  <div className="max-h-20 overflow-y-auto space-y-1">
+                  <div className="max-h-24 overflow-y-auto space-y-1">
                     {exercises
                       .filter((e) => e.category === cat || (cat === "Siła" && e.category === "Plyometria"))
                       .map((ex) => (
@@ -2811,8 +2899,10 @@ export default function Home() {
                               : "hover:bg-neutral-900 text-neutral-400"
                           }`}
                         >
-                          <span>{ex.title}</span>
-                          <span className="text-[10px] text-neutral-500">{ex.subcategory}</span>
+                          <span className="truncate max-w-[230px]">{ex.title}</span>
+                          <span className="text-[10px] text-neutral-500 shrink-0">
+                            {ex.equipment ? `${ex.subcategory} • ${ex.equipment}` : ex.subcategory}
+                          </span>
                         </div>
                       ))}
                   </div>
