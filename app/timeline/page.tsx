@@ -180,6 +180,15 @@ export default function TimelinePage() {
     setRemoveExistingVideo(false);
   };
 
+  const canManageSubmission = (sub: Submission) => {
+    if (!currentUser || !currentUser.username) return false;
+    if (currentUser.role === "coach") return true;
+    return (
+      currentUser.username.trim().toLowerCase() ===
+      (sub.athlete_name || "").trim().toLowerCase()
+    );
+  };
+
   const openCreateModal = () => {
     setEditingSubmission(null);
     setExerciseSearchTerm("");
@@ -197,6 +206,10 @@ export default function TimelinePage() {
   };
 
   const openEditModal = (sub: Submission) => {
+    if (!canManageSubmission(sub)) {
+      alert("Możesz edytować wyłącznie swoje własne wpisy.");
+      return;
+    }
     setEditingSubmission(sub);
     setExerciseSearchTerm("");
     setComboSearchTerm("");
@@ -220,9 +233,22 @@ export default function TimelinePage() {
     setIsPostModalOpen(true);
   };
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("goat_auth_token") || "";
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
   const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+
+    if (editingSubmission && !canManageSubmission(editingSubmission)) {
+      alert("Brak uprawnień do edycji tego wpisu.");
+      return;
+    }
 
     const isWorkoutSummary = editingSubmission?.post_type === "workout_summary";
     const chosenEx = exercises.find((ex) => ex.id === selectedExerciseId);
@@ -271,19 +297,23 @@ export default function TimelinePage() {
           updatePayload.exercise_title = chosenEx.title;
         }
 
-        const { data, error } = await supabase
-          .from("progress_submissions")
-          .update(updatePayload)
-          .eq("id", editingSubmission.id)
-          .select();
+        const res = await fetch("/api/timeline", {
+          method: "PATCH",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            id: editingSubmission.id,
+            updates: updatePayload,
+          }),
+        });
 
-        if (error) {
-          throw new Error("Błąd aktualizacji wpisu: " + error.message);
+        const result = await res.json();
+        if (!res.ok) {
+          throw new Error(result.error || "Błąd aktualizacji wpisu.");
         }
 
-        if (data && data[0]) {
+        if (result.submission) {
           setSubmissions((prev) =>
-            prev.map((item) => (item.id === editingSubmission.id ? data[0] : item))
+            prev.map((item) => (item.id === editingSubmission.id ? result.submission : item))
           );
         }
       } else {
@@ -335,41 +365,56 @@ export default function TimelinePage() {
 
     const feedbackText = feedbackDrafts[submissionId]?.trim() || null;
 
-    const { error } = await supabase
-      .from("progress_submissions")
-      .update({ coach_feedback: feedbackText })
-      .eq("id", submissionId);
+    try {
+      const res = await fetch("/api/timeline", {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          id: submissionId,
+          updates: { coach_feedback: feedbackText },
+        }),
+      });
 
-    setSavingFeedbackId(null);
+      const result = await res.json();
+      setSavingFeedbackId(null);
 
-    if (!error) {
-      setSubmissions((prev) =>
-        prev.map((s) => (s.id === submissionId ? { ...s, coach_feedback: feedbackText } : s))
-      );
-      alert("Wskazówka trenerska zapisana!");
-    } else {
-      alert("Błąd zapisu: " + error.message);
+      if (res.ok) {
+        setSubmissions((prev) =>
+          prev.map((s) => (s.id === submissionId ? { ...s, coach_feedback: feedbackText } : s))
+        );
+        alert("Wskazówka trenerska zapisana!");
+      } else {
+        alert("Błąd zapisu: " + (result.error || "Brak uprawnień"));
+      }
+    } catch {
+      setSavingFeedbackId(null);
+      alert("Błąd połączenia z serwerem.");
     }
   };
 
   const handleDeleteSubmission = async (sub: Submission) => {
+    if (!canManageSubmission(sub)) {
+      alert("Możesz usuwać wyłącznie swoje własne wpisy.");
+      return;
+    }
+
     if (!confirm("Czy na pewno usunąć ten wpis z Timeline?")) return;
 
-    const { error } = await supabase.from("progress_submissions").delete().eq("id", sub.id);
-    if (!error) {
-      setSubmissions((prev) => prev.filter((s) => s.id !== sub.id));
-    } else {
-      alert("Nie udało się usunąć wpisu: " + error.message);
-    }
-  };
+    try {
+      const res = await fetch(`/api/timeline?id=${encodeURIComponent(sub.id)}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
 
-  const canManageSubmission = (sub: Submission) => {
-    if (!currentUser) return false;
-    if (currentUser.role === "coach") return true;
-    return (
-      currentUser.username.trim().toLowerCase() ===
-      (sub.athlete_name || "").trim().toLowerCase()
-    );
+      const result = await res.json();
+      if (res.ok) {
+        setSubmissions((prev) => prev.filter((s) => s.id !== sub.id));
+      } else {
+        alert("Nie udało się usunąć wpisu: " + (result.error || "Brak uprawnień"));
+      }
+    } catch {
+      alert("Błąd połączenia z serwerem podczas usuwania.");
+    }
   };
 
   return (
