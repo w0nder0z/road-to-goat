@@ -25,6 +25,8 @@ interface Submission {
 }
 
 const ALLOWED_TIMELINE_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie"];
+const STORAGE_BUCKET = "timeline-videos";
+const MAX_VIDEO_SIZE_MB = 100;
 
 export default function TimelinePage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -35,9 +37,13 @@ export default function TimelinePage() {
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
   const [exerciseSearchTerm, setExerciseSearchTerm] = useState("");
+
+  const [uploadMode, setUploadMode] = useState<"file" | "link">("file");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState("");
 
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, string>>({});
   const [savingFeedbackId, setSavingFeedbackId] = useState<string | null>(null);
@@ -129,6 +135,31 @@ export default function TimelinePage() {
     return url;
   };
 
+  const isDirectVideoFile = (url: string) => {
+    return (
+      url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`) ||
+      /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url)
+    );
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    const sizeMb = file.size / (1024 * 1024);
+    if (sizeMb > MAX_VIDEO_SIZE_MB) {
+      alert(`Plik jest za duży (${sizeMb.toFixed(1)} MB). Maksymalny rozmiar to ${MAX_VIDEO_SIZE_MB} MB.`);
+      e.target.value = "";
+      setSelectedFile(null);
+      return;
+    }
+
+    setSelectedFile(file);
+  };
+
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -140,32 +171,70 @@ export default function TimelinePage() {
     }
 
     setSubmitting(true);
-    const formattedUrl = videoUrl.trim() ? formatVideoUrl(videoUrl.trim()) : null;
+    let finalVideoUrl: string | null = null;
 
-    const payload = {
-      athlete_name: currentUser.username,
-      exercise_id: chosenEx.id,
-      exercise_title: chosenEx.title,
-      video_url: formattedUrl,
-      notes: notes.trim(),
-      post_type: "video_progress",
-    };
+    try {
+      if (uploadMode === "file" && selectedFile) {
+        setUploadStatusText("Przesyłanie wideo na serwer...");
+        const fileExt = selectedFile.name.split(".").pop()?.toLowerCase() || "mp4";
+        const safeUser = currentUser.username.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const filePath = `${safeUser}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
 
-    const { data, error } = await supabase
-      .from("progress_submissions")
-      .insert([payload])
-      .select();
+        const { error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(filePath, selectedFile, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: selectedFile.type || "video/mp4",
+          });
 
-    setSubmitting(false);
+        if (uploadError) {
+          throw new Error("Błąd wysyłania pliku wideo: " + uploadError.message);
+        }
 
-    if (!error && data) {
-      setSubmissions((prev) => [data[0], ...prev]);
-      setIsPostModalOpen(false);
-      setVideoUrl("");
-      setNotes("");
-      setExerciseSearchTerm("");
-    } else if (error) {
-      alert("Błąd dodawania posta: " + error.message);
+        const { data: publicUrlData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(filePath);
+
+        finalVideoUrl = publicUrlData.publicUrl;
+      } else if (uploadMode === "link" && videoUrl.trim()) {
+        finalVideoUrl = formatVideoUrl(videoUrl.trim());
+      }
+
+      setUploadStatusText("Zapisywanie wpisu...");
+
+      const payload = {
+        athlete_name: currentUser.username,
+        exercise_id: chosenEx.id,
+        exercise_title: chosenEx.title,
+        video_url: finalVideoUrl,
+        notes: notes.trim(),
+        post_type: "video_progress",
+      };
+
+      const { data, error } = await supabase
+        .from("progress_submissions")
+        .insert([payload])
+        .select();
+
+      if (error) {
+        throw new Error("Błąd zapisu posta: " + error.message);
+      }
+
+      if (data) {
+        setSubmissions((prev) => [data[0], ...prev]);
+        setIsPostModalOpen(false);
+        setSelectedFile(null);
+        setVideoUrl("");
+        setNotes("");
+        setExerciseSearchTerm("");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Wystąpił nieznany błąd.";
+      alert(message);
+    } finally {
+      setSubmitting(false);
+      setUploadStatusText("");
     }
   };
 
@@ -192,11 +261,20 @@ export default function TimelinePage() {
     }
   };
 
-  const handleDeleteSubmission = async (id: string) => {
+  const handleDeleteSubmission = async (sub: Submission) => {
     if (!confirm("Czy na pewno usunąć ten wpis z Timeline?")) return;
-    const { error } = await supabase.from("progress_submissions").delete().eq("id", id);
+
+    // Jeśli wideo było w Supabase Storage, usuń również plik z koszyka
+    if (sub.video_url && sub.video_url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`)) {
+      const storagePath = sub.video_url.split(`/storage/v1/object/public/${STORAGE_BUCKET}/`)[1];
+      if (storagePath) {
+        await supabase.storage.from(STORAGE_BUCKET).remove([decodeURIComponent(storagePath)]);
+      }
+    }
+
+    const { error } = await supabase.from("progress_submissions").delete().eq("id", sub.id);
     if (!error) {
-      setSubmissions((prev) => prev.filter((s) => s.id !== id));
+      setSubmissions((prev) => prev.filter((s) => s.id !== sub.id));
     }
   };
 
@@ -226,6 +304,9 @@ export default function TimelinePage() {
             <button
               onClick={() => {
                 setExerciseSearchTerm("");
+                setSelectedFile(null);
+                setVideoUrl("");
+                setUploadMode("file");
                 setIsPostModalOpen(true);
               }}
               className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95"
@@ -302,7 +383,7 @@ export default function TimelinePage() {
 
                   {canDelete && (
                     <button
-                      onClick={() => handleDeleteSubmission(sub.id)}
+                      onClick={() => handleDeleteSubmission(sub)}
                       className="text-xs text-neutral-500 hover:text-red-400 px-2 py-1 rounded-lg bg-neutral-950 border border-neutral-800"
                       title="Usuń wpis"
                     >
@@ -318,15 +399,27 @@ export default function TimelinePage() {
                   </p>
                 )}
 
-                {/* ODTWARZACZ WIDEO */}
+                {/* ODTWARZACZ WIDEO (NATYWNY PLIK LUB IFRAME) */}
                 {sub.video_url && (
-                  <div className="rounded-2xl overflow-hidden border border-neutral-800 bg-black aspect-video">
-                    <iframe
-                      src={sub.video_url}
-                      className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
+                  <div className="rounded-2xl overflow-hidden border border-neutral-800 bg-black">
+                    {isDirectVideoFile(sub.video_url) ? (
+                      <video
+                        src={sub.video_url}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="w-full max-h-[480px] object-contain mx-auto"
+                      />
+                    ) : (
+                      <div className="aspect-video">
+                        <iframe
+                          src={sub.video_url}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -378,14 +471,14 @@ export default function TimelinePage() {
         )}
       </div>
 
-      {/* MODAL DODAWANIA POSTA Z WYSZUKIWARKĄ TRICKÓW */}
+      {/* MODAL DODAWANIA POSTA Z UPLOADEM PLIKU WIDEO */}
       {isPostModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-md shadow-2xl space-y-3.5 text-left">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 w-full max-w-md shadow-2xl space-y-3.5 text-left max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
               <h2 className="text-base font-bold text-white">🎬 Dodaj Postęp na Timeline</h2>
               <button
-                onClick={() => setIsPostModalOpen(false)}
+                onClick={() => !submitting && setIsPostModalOpen(false)}
                 className="text-neutral-400 hover:text-white text-xs px-2"
               >
                 ✕
@@ -393,6 +486,7 @@ export default function TimelinePage() {
             </div>
 
             <form onSubmit={handleCreatePost} className="space-y-3 text-xs">
+              {/* 1. WYBÓR TRICKU Z WYSZUKIWARKĄ */}
               <div className="space-y-1.5">
                 <label className="text-neutral-400 block font-semibold">
                   1. Wyszukaj i wybierz trick lub ćwiczenie *
@@ -422,25 +516,85 @@ export default function TimelinePage() {
                   )}
                 </select>
                 <span className="text-[10px] text-neutral-500 block">
-                  Znaleziono: {filteredExercises.length} pozycji (Tricking, Plyometria, Siła, Rozciąganie)
+                  Dostępne pozycje: {filteredExercises.length} (Tricking, Plyometria, Siła, Rozciąganie)
                 </span>
               </div>
 
-              <div>
-                <label className="text-neutral-400 block mb-1">
-                  Link do wideo (YouTube / Google Drive)
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://drive.google.com/file/d/... lub YouTube"
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
+              {/* 2. WYBÓR PLIKU WIDEO LUB LINKU */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-neutral-400 font-semibold">2. Nagranie wideo</label>
+                  <div className="flex bg-neutral-950 border border-neutral-800 rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setUploadMode("file")}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
+                        uploadMode === "file"
+                          ? "bg-emerald-500 text-black"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      📁 Plik z telefonu
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUploadMode("link")}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all ${
+                        uploadMode === "link"
+                          ? "bg-emerald-500 text-black"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      🔗 Link YT/Drive
+                    </button>
+                  </div>
+                </div>
+
+                {uploadMode === "file" ? (
+                  <label className="flex flex-col items-center justify-center w-full border-2 border-dashed border-neutral-700 hover:border-emerald-500/60 bg-neutral-950/80 rounded-2xl p-4 cursor-pointer transition-all text-center">
+                    <span className="text-xl mb-1">📹</span>
+                    {selectedFile ? (
+                      <div className="space-y-0.5">
+                        <span className="text-emerald-400 font-bold block truncate max-w-[260px]">
+                          {selectedFile.name}
+                        </span>
+                        <span className="text-[10px] text-neutral-400 block">
+                          {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB • Kliknij, aby zmienić
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        <span className="text-neutral-200 font-semibold block">
+                          Kliknij, aby wybrać film z galerii
+                        </span>
+                        <span className="text-[10px] text-neutral-500 block">
+                          MP4 / MOV / WEBM (maks. {MAX_VIDEO_SIZE_MB} MB)
+                        </span>
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <input
+                    type="url"
+                    placeholder="https://youtube.com/... lub Google Drive"
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                )}
               </div>
 
+              {/* 3. KOMENTARZ */}
               <div>
-                <label className="text-neutral-400 block mb-1">Komentarz / Co poprawić?</label>
+                <label className="text-neutral-400 block mb-1 font-semibold">
+                  3. Komentarz / Co poprawić?
+                </label>
                 <textarea
                   rows={3}
                   placeholder="np. Pierwsze próby lądowania, wydaje mi się że za szybko zrywam śrubę..."
@@ -450,11 +604,18 @@ export default function TimelinePage() {
                 />
               </div>
 
+              {uploadStatusText && (
+                <div className="bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-[11px] font-semibold px-3 py-2 rounded-xl animate-pulse text-center">
+                  ⏳ {uploadStatusText}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800">
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={() => setIsPostModalOpen(false)}
-                  className="px-3 py-1.5 text-neutral-400"
+                  className="px-3 py-1.5 text-neutral-400 disabled:opacity-40"
                 >
                   Anuluj
                 </button>
