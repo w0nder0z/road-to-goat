@@ -4,6 +4,11 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import {
+  uploadVideoToCloudinary,
+  isDirectVideoUrl,
+  MAX_CLOUDINARY_VIDEO_MB,
+} from "@/lib/cloudinary";
 
 interface Exercise {
   id: string;
@@ -48,7 +53,6 @@ interface Challenge {
 }
 
 const EXERCISE_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie"];
-const STORAGE_BUCKET = "timeline-videos";
 
 const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
   Tricking: [
@@ -221,6 +225,7 @@ export default function Home() {
   const [challengeUploadMode, setChallengeUploadMode] = useState<"file" | "link">("file");
   const [challengeFile, setChallengeFile] = useState<File | null>(null);
   const [savingChallenge, setSavingChallenge] = useState(false);
+  const [challengeUploadStatus, setChallengeUploadStatus] = useState("");
 
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
@@ -727,14 +732,27 @@ export default function Home() {
     return url;
   };
 
-  const isDirectVideoFile = (url: string) => {
-    return (
-      url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`) ||
-      /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url)
-    );
+  const handleChallengeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) {
+      setChallengeFile(null);
+      return;
+    }
+
+    const sizeMb = file.size / (1024 * 1024);
+    if (sizeMb > MAX_CLOUDINARY_VIDEO_MB) {
+      alert(
+        `Plik jest za duży (${sizeMb.toFixed(1)} MB). Maksymalny rozmiar to ${MAX_CLOUDINARY_VIDEO_MB} MB.`
+      );
+      e.target.value = "";
+      setChallengeFile(null);
+      return;
+    }
+
+    setChallengeFile(file);
   };
 
-  // Zapisywanie nowego Wyzwania
+  // Zapisywanie nowego Wyzwania przez Cloudinary
   const handleSaveChallenge = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !challengeForm.title.trim()) return;
@@ -744,28 +762,19 @@ export default function Home() {
 
     try {
       if (challengeUploadMode === "file" && challengeFile) {
-        const fileExt = challengeFile.name.split(".").pop()?.toLowerCase() || "mp4";
-        const safeUser = currentUser.username.replace(/[^a-zA-Z0-9_-]/g, "_");
-        const filePath = `challenges/${safeUser}_${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .upload(filePath, challengeFile, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: challengeFile.type || "video/mp4",
-          });
-
-        if (uploadError) throw new Error("Błąd wysyłania wideo: " + uploadError.message);
-
-        const { data: publicUrlData } = supabase.storage
-          .from(STORAGE_BUCKET)
-          .getPublicUrl(filePath);
-
-        finalVideoUrl = publicUrlData.publicUrl;
+        setChallengeUploadStatus("Przesyłanie i optymalizacja wideo: 0%");
+        finalVideoUrl = await uploadVideoToCloudinary(challengeFile, (percent) => {
+          setChallengeUploadStatus(
+            percent < 100
+              ? `Przesyłanie wideo: ${percent}%`
+              : "Kompresja wideo w chmurze..."
+          );
+        });
       } else if (challengeUploadMode === "link" && challengeForm.video_url.trim()) {
         finalVideoUrl = formatUrl(challengeForm.video_url.trim());
       }
+
+      setChallengeUploadStatus("Zapisywanie wyzwania...");
 
       const payload = {
         title: challengeForm.title.trim(),
@@ -797,17 +806,12 @@ export default function Home() {
       alert(err instanceof Error ? err.message : "Wystąpił błąd.");
     } finally {
       setSavingChallenge(false);
+      setChallengeUploadStatus("");
     }
   };
 
   const handleDeleteChallenge = async (ch: Challenge) => {
     if (!confirm(`Czy na pewno usunąć wyzwanie "${ch.title}"?`)) return;
-    if (ch.video_url && ch.video_url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`)) {
-      const storagePath = ch.video_url.split(`/storage/v1/object/public/${STORAGE_BUCKET}/`)[1];
-      if (storagePath) {
-        await supabase.storage.from(STORAGE_BUCKET).remove([decodeURIComponent(storagePath)]);
-      }
-    }
     const { error } = await supabase.from("challenges").delete().eq("id", ch.id);
     if (!error) {
       setChallenges((prev) => prev.filter((item) => item.id !== ch.id));
@@ -1635,7 +1639,7 @@ export default function Home() {
                         {/* WIDEO POKAZOWE WYZWANIA */}
                         {ch.video_url && (
                           <div className="rounded-2xl overflow-hidden border border-neutral-800 bg-black">
-                            {isDirectVideoFile(ch.video_url) ? (
+                            {isDirectVideoUrl(ch.video_url) ? (
                               <video
                                 src={ch.video_url}
                                 controls
@@ -2079,14 +2083,19 @@ export default function Home() {
                         📹 {challengeFile.name} ({(challengeFile.size / (1024 * 1024)).toFixed(1)} MB)
                       </span>
                     ) : (
-                      <span className="text-neutral-300 text-xs font-semibold">
-                        Kliknij, aby wybrać wideo pokazowe z urządzenia
-                      </span>
+                      <div className="space-y-0.5">
+                        <span className="text-neutral-300 text-xs font-semibold block">
+                          Kliknij, aby wybrać wideo pokazowe z urządzenia
+                        </span>
+                        <span className="text-[10px] text-neutral-500 block">
+                          Do {MAX_CLOUDINARY_VIDEO_MB} MB (auto-kompresja Cloudinary)
+                        </span>
+                      </div>
                     )}
                     <input
                       type="file"
                       accept="video/*"
-                      onChange={(e) => setChallengeFile(e.target.files?.[0] || null)}
+                      onChange={handleChallengeFileChange}
                       className="hidden"
                     />
                   </label>
@@ -2111,6 +2120,12 @@ export default function Home() {
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white"
                 />
               </div>
+
+              {challengeUploadStatus && (
+                <div className="bg-amber-950/50 border border-amber-500/40 text-amber-300 text-[11px] font-semibold px-3 py-2 rounded-xl animate-pulse text-center">
+                  ⏳ {challengeUploadStatus}
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800">
                 <button

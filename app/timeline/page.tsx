@@ -3,6 +3,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import {
+  uploadVideoToCloudinary,
+  isDirectVideoUrl,
+  MAX_CLOUDINARY_VIDEO_MB,
+} from "@/lib/cloudinary";
 
 interface ExerciseOption {
   id: string;
@@ -31,8 +36,6 @@ interface Submission {
 }
 
 const ALLOWED_TIMELINE_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie"];
-const STORAGE_BUCKET = "timeline-videos";
-const MAX_VIDEO_SIZE_MB = 250;
 
 export default function TimelinePage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -40,13 +43,11 @@ export default function TimelinePage() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<{ username: string; role: "athlete" | "coach" } | null>(null);
 
-  // Stan modala (dodawanie + edycja)
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [editingSubmission, setEditingSubmission] = useState<Submission | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
   const [exerciseSearchTerm, setExerciseSearchTerm] = useState("");
 
-  // Sekwencja elementów (np. Hook -> TD Raiz -> Cork)
   const [comboSequence, setComboSequence] = useState<SequenceStep[]>([]);
   const [comboSearchTerm, setComboSearchTerm] = useState("");
 
@@ -160,23 +161,6 @@ export default function TimelinePage() {
     return url;
   };
 
-  const isDirectVideoFile = (url: string) => {
-    return (
-      url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`) ||
-      /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url)
-    );
-  };
-
-  const removeStorageVideoIfOwned = async (url: string | null) => {
-    if (!url) return;
-    if (url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`)) {
-      const storagePath = url.split(`/storage/v1/object/public/${STORAGE_BUCKET}/`)[1];
-      if (storagePath) {
-        await supabase.storage.from(STORAGE_BUCKET).remove([decodeURIComponent(storagePath)]);
-      }
-    }
-  };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (!file) {
@@ -185,8 +169,8 @@ export default function TimelinePage() {
     }
 
     const sizeMb = file.size / (1024 * 1024);
-    if (sizeMb > MAX_VIDEO_SIZE_MB) {
-      alert(`Plik jest za duży (${sizeMb.toFixed(1)} MB). Maksymalny rozmiar to ${MAX_VIDEO_SIZE_MB} MB.`);
+    if (sizeMb > MAX_CLOUDINARY_VIDEO_MB) {
+      alert(`Plik jest za duży (${sizeMb.toFixed(1)} MB). Maksymalny rozmiar to ${MAX_CLOUDINARY_VIDEO_MB} MB.`);
       e.target.value = "";
       setSelectedFile(null);
       return;
@@ -226,7 +210,7 @@ export default function TimelinePage() {
     setRemoveExistingVideo(false);
     setNotes(sub.notes || "");
 
-    if (sub.video_url && !isDirectVideoFile(sub.video_url)) {
+    if (sub.video_url && !isDirectVideoUrl(sub.video_url)) {
       setUploadMode("link");
       setVideoUrl(sub.video_url);
     } else {
@@ -253,44 +237,20 @@ export default function TimelinePage() {
 
     try {
       if (removeExistingVideo) {
-        if (editingSubmission?.video_url) {
-          await removeStorageVideoIfOwned(editingSubmission.video_url);
-        }
         finalVideoUrl = null;
       }
 
       if (uploadMode === "file" && selectedFile) {
-        setUploadStatusText("Przesyłanie wideo na serwer...");
-        if (editingSubmission?.video_url) {
-          await removeStorageVideoIfOwned(editingSubmission.video_url);
-        }
-
-        const fileExt = selectedFile.name.split(".").pop()?.toLowerCase() || "mp4";
-        const safeUser = currentUser.username.replace(/[^a-zA-Z0-9_-]/g, "_");
-        const filePath = `${safeUser}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .upload(filePath, selectedFile, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: selectedFile.type || "video/mp4",
-          });
-
-        if (uploadError) {
-          throw new Error("Błąd wysyłania pliku wideo: " + uploadError.message);
-        }
-
-        const { data: publicUrlData } = supabase.storage
-          .from(STORAGE_BUCKET)
-          .getPublicUrl(filePath);
-
-        finalVideoUrl = publicUrlData.publicUrl;
+        setUploadStatusText("Przesyłanie i optymalizacja wideo: 0%");
+        finalVideoUrl = await uploadVideoToCloudinary(selectedFile, (percent) => {
+          setUploadStatusText(
+            percent < 100
+              ? `Przesyłanie wideo: ${percent}%`
+              : "Kompresja i optymalizacja wideo w chmurze..."
+          );
+        });
       } else if (uploadMode === "link") {
         if (videoUrl.trim()) {
-          if (editingSubmission?.video_url && isDirectVideoFile(editingSubmission.video_url)) {
-            await removeStorageVideoIfOwned(editingSubmission.video_url);
-          }
           finalVideoUrl = formatVideoUrl(videoUrl.trim());
         } else if (!editingSubmission) {
           finalVideoUrl = null;
@@ -395,8 +355,6 @@ export default function TimelinePage() {
   const handleDeleteSubmission = async (sub: Submission) => {
     if (!confirm("Czy na pewno usunąć ten wpis z Timeline?")) return;
 
-    await removeStorageVideoIfOwned(sub.video_url);
-
     const { error } = await supabase.from("progress_submissions").delete().eq("id", sub.id);
     if (!error) {
       setSubmissions((prev) => prev.filter((s) => s.id !== sub.id));
@@ -477,7 +435,6 @@ export default function TimelinePage() {
                 key={sub.id}
                 className="bg-neutral-900/70 border border-neutral-800 rounded-3xl p-4 md:p-5 space-y-3.5 shadow-xl"
               >
-                {/* GÓRA KARTY */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -530,7 +487,6 @@ export default function TimelinePage() {
                   )}
                 </div>
 
-                {/* SEKWENCJA ELEMENTÓW NAGRANIA (COMBO) */}
                 {Array.isArray(sub.combo_sequence) && sub.combo_sequence.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 bg-neutral-950/90 border border-emerald-500/30 p-2.5 rounded-2xl">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mr-1">
@@ -552,17 +508,15 @@ export default function TimelinePage() {
                   </div>
                 )}
 
-                {/* NOTATKA ZAWODNIKA */}
                 {sub.notes && (
                   <p className="text-xs md:text-sm text-neutral-300 bg-neutral-950/70 border border-neutral-800/80 p-3 rounded-2xl leading-relaxed">
                     {sub.notes}
                   </p>
                 )}
 
-                {/* ODTWARZACZ WIDEO */}
                 {sub.video_url && (
                   <div className="rounded-2xl overflow-hidden border border-neutral-800 bg-black">
-                    {isDirectVideoFile(sub.video_url) ? (
+                    {isDirectVideoUrl(sub.video_url) ? (
                       <video
                         src={sub.video_url}
                         controls
@@ -583,7 +537,6 @@ export default function TimelinePage() {
                   </div>
                 )}
 
-                {/* FEEDBACK TRENERA */}
                 <div className="pt-1">
                   {currentUser?.role === "coach" ? (
                     <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-3 space-y-2">
@@ -648,7 +601,6 @@ export default function TimelinePage() {
             </div>
 
             <form onSubmit={handleSavePost} className="space-y-3 text-xs">
-              {/* 1. GŁÓWNY TRICK / ĆWICZENIE */}
               {editingSubmission?.post_type !== "workout_summary" && (
                 <div className="space-y-1.5">
                   <label className="text-neutral-400 block font-semibold">
@@ -681,7 +633,6 @@ export default function TimelinePage() {
                 </div>
               )}
 
-              {/* 2. SEKWENCJA ELEMENTÓW NAGRANIA (COMBO) */}
               <div className="border border-neutral-800 bg-neutral-950/70 p-3 rounded-2xl space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-emerald-400 font-semibold">
@@ -747,7 +698,6 @@ export default function TimelinePage() {
                 </div>
               </div>
 
-              {/* 3. WYBÓR PLIKU WIDEO LUB LINKU */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-neutral-400 font-semibold">3. Nagranie wideo</label>
@@ -815,7 +765,7 @@ export default function TimelinePage() {
                             : "Kliknij, aby wybrać film z galerii"}
                         </span>
                         <span className="text-[10px] text-neutral-500 block">
-                          MP4 / MOV / WEBM
+                          MP4 / MOV / WEBM (do {MAX_CLOUDINARY_VIDEO_MB} MB, auto-kompresja)
                         </span>
                       </div>
                     )}
@@ -840,7 +790,6 @@ export default function TimelinePage() {
                 )}
               </div>
 
-              {/* 4. KOMENTARZ */}
               <div>
                 <label className="text-neutral-400 block mb-1 font-semibold">
                   4. Komentarz / Co poprawić?
@@ -879,7 +828,7 @@ export default function TimelinePage() {
                   className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-black font-bold px-4 py-1.5 rounded-xl"
                 >
                   {submitting
-                    ? "Zapisywanie..."
+                    ? "Wysyłanie..."
                     : editingSubmission
                     ? "Zapisz zmiany"
                     : "Opublikuj"}
