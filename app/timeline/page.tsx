@@ -11,6 +11,11 @@ interface ExerciseOption {
   difficulty: string;
 }
 
+interface SequenceStep {
+  id: string;
+  title: string;
+}
+
 interface Submission {
   id: string;
   athlete_name: string;
@@ -21,12 +26,13 @@ interface Submission {
   coach_feedback: string | null;
   post_type?: string;
   workout_duration?: string;
+  combo_sequence?: SequenceStep[];
   created_at: string;
 }
 
 const ALLOWED_TIMELINE_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie"];
 const STORAGE_BUCKET = "timeline-videos";
-const MAX_VIDEO_SIZE_MB = 100;
+const MAX_VIDEO_SIZE_MB = 250;
 
 export default function TimelinePage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -39,6 +45,10 @@ export default function TimelinePage() {
   const [editingSubmission, setEditingSubmission] = useState<Submission | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
   const [exerciseSearchTerm, setExerciseSearchTerm] = useState("");
+
+  // Sekwencja elementów (np. Hook -> TD Raiz -> Cork)
+  const [comboSequence, setComboSequence] = useState<SequenceStep[]>([]);
+  const [comboSearchTerm, setComboSearchTerm] = useState("");
 
   const [uploadMode, setUploadMode] = useState<"file" | "link">("file");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -107,6 +117,18 @@ export default function TimelinePage() {
         ex.difficulty?.toLowerCase().includes(term)
     );
   }, [exercises, exerciseSearchTerm]);
+
+  const filteredComboExercises = useMemo(() => {
+    const term = comboSearchTerm.trim().toLowerCase();
+    if (!term) return exercises.slice(0, 25);
+    return exercises
+      .filter(
+        (ex) =>
+          ex.title.toLowerCase().includes(term) ||
+          ex.category.toLowerCase().includes(term)
+      )
+      .slice(0, 35);
+  }, [exercises, comboSearchTerm]);
 
   useEffect(() => {
     if (filteredExercises.length > 0) {
@@ -177,6 +199,8 @@ export default function TimelinePage() {
   const openCreateModal = () => {
     setEditingSubmission(null);
     setExerciseSearchTerm("");
+    setComboSearchTerm("");
+    setComboSequence([]);
     if (exercises.length > 0) {
       setSelectedExerciseId(exercises[0].id);
     }
@@ -191,6 +215,8 @@ export default function TimelinePage() {
   const openEditModal = (sub: Submission) => {
     setEditingSubmission(sub);
     setExerciseSearchTerm("");
+    setComboSearchTerm("");
+    setComboSequence(Array.isArray(sub.combo_sequence) ? sub.combo_sequence : []);
     if (sub.exercise_id && exercises.some((e) => e.id === sub.exercise_id)) {
       setSelectedExerciseId(sub.exercise_id);
     } else if (exercises.length > 0) {
@@ -218,7 +244,7 @@ export default function TimelinePage() {
     const chosenEx = exercises.find((ex) => ex.id === selectedExerciseId);
 
     if (!isWorkoutSummary && !chosenEx) {
-      alert("Wybierz trick lub ćwiczenie z listy.");
+      alert("Wybierz główny trick lub ćwiczenie z listy.");
       return;
     }
 
@@ -277,6 +303,7 @@ export default function TimelinePage() {
         const updatePayload: Record<string, unknown> = {
           notes: notes.trim(),
           video_url: finalVideoUrl,
+          combo_sequence: comboSequence,
         };
 
         if (!isWorkoutSummary && chosenEx) {
@@ -307,6 +334,7 @@ export default function TimelinePage() {
           video_url: finalVideoUrl,
           notes: notes.trim(),
           post_type: "video_progress",
+          combo_sequence: comboSequence,
         };
 
         const { data, error } = await supabase
@@ -329,6 +357,8 @@ export default function TimelinePage() {
       setVideoUrl("");
       setNotes("");
       setExerciseSearchTerm("");
+      setComboSearchTerm("");
+      setComboSequence([]);
       setRemoveExistingVideo(false);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Wystąpił nieznany błąd.";
@@ -500,6 +530,28 @@ export default function TimelinePage() {
                   )}
                 </div>
 
+                {/* SEKWENCJA ELEMENTÓW NAGRANIA (COMBO) */}
+                {Array.isArray(sub.combo_sequence) && sub.combo_sequence.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 bg-neutral-950/90 border border-emerald-500/30 p-2.5 rounded-2xl">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mr-1">
+                      🔗 Combo:
+                    </span>
+                    {sub.combo_sequence.map((step, idx) => (
+                      <React.Fragment key={`${step.id}-${idx}`}>
+                        <Link
+                          href={`/exercise/${step.id}`}
+                          className="text-[11px] font-bold bg-neutral-900 hover:border-emerald-400 border border-neutral-700 text-emerald-300 px-2 py-0.5 rounded-lg"
+                        >
+                          {step.title}
+                        </Link>
+                        {idx < sub.combo_sequence!.length - 1 && (
+                          <span className="text-emerald-500 font-bold text-xs">➔</span>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
+
                 {/* NOTATKA ZAWODNIKA */}
                 {sub.notes && (
                   <p className="text-xs md:text-sm text-neutral-300 bg-neutral-950/70 border border-neutral-800/80 p-3 rounded-2xl leading-relaxed">
@@ -596,16 +648,16 @@ export default function TimelinePage() {
             </div>
 
             <form onSubmit={handleSavePost} className="space-y-3 text-xs">
-              {/* 1. WYBÓR TRICKU Z WYSZUKIWARKĄ (ukryty tylko przy podsumowaniu całego treningu) */}
+              {/* 1. GŁÓWNY TRICK / ĆWICZENIE */}
               {editingSubmission?.post_type !== "workout_summary" && (
                 <div className="space-y-1.5">
                   <label className="text-neutral-400 block font-semibold">
-                    1. Wyszukaj i wybierz trick lub ćwiczenie *
+                    1. Główny trick lub ćwiczenie *
                   </label>
 
                   <input
                     type="text"
-                    placeholder="🔍 Wpisz nazwę (np. Cork, Full, Szpagat)..."
+                    placeholder="🔍 Wpisz główny element (np. Corkscrew)..."
                     value={exerciseSearchTerm}
                     onChange={(e) => setExerciseSearchTerm(e.target.value)}
                     className="w-full bg-neutral-950 border border-emerald-500/40 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -626,16 +678,79 @@ export default function TimelinePage() {
                       ))
                     )}
                   </select>
-                  <span className="text-[10px] text-neutral-500 block">
-                    Dostępne pozycje: {filteredExercises.length} (Tricking, Plyometria, Siła, Rozciąganie)
-                  </span>
                 </div>
               )}
 
-              {/* 2. WYBÓR PLIKU WIDEO LUB LINKU */}
+              {/* 2. SEKWENCJA ELEMENTÓW NAGRANIA (COMBO) */}
+              <div className="border border-neutral-800 bg-neutral-950/70 p-3 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-emerald-400 font-semibold">
+                    2. Sekwencja elementów nagrania ({comboSequence.length})
+                  </label>
+                  {comboSequence.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setComboSequence([])}
+                      className="text-[10px] text-neutral-500 hover:text-red-400"
+                    >
+                      Wyczyść
+                    </button>
+                  )}
+                </div>
+
+                {comboSequence.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 bg-neutral-900 p-2 rounded-xl border border-neutral-800">
+                    {comboSequence.map((step, idx) => (
+                      <React.Fragment key={`${step.id}-${idx}`}>
+                        <span className="inline-flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-lg text-[11px] font-bold">
+                          <span>{step.title}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setComboSequence((prev) => prev.filter((_, i) => i !== idx))
+                            }
+                            className="text-red-400 hover:text-red-300 ml-0.5"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                        {idx < comboSequence.length - 1 && (
+                          <span className="text-neutral-500 text-xs">➔</span>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  placeholder="🔍 Dodaj po kolei (np. Hook Kick, Touchdown Raiz, Cork)..."
+                  value={comboSearchTerm}
+                  onChange={(e) => setComboSearchTerm(e.target.value)}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+
+                <div className="max-h-24 overflow-y-auto space-y-1">
+                  {filteredComboExercises.map((ex) => (
+                    <button
+                      key={ex.id}
+                      type="button"
+                      onClick={() =>
+                        setComboSequence((prev) => [...prev, { id: ex.id, title: ex.title }])
+                      }
+                      className="w-full text-left px-2 py-1 rounded-lg hover:bg-neutral-900 text-neutral-300 text-[11px] flex items-center justify-between"
+                    >
+                      <span>+ {ex.title}</span>
+                      <span className="text-[10px] text-neutral-500">{ex.category}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. WYBÓR PLIKU WIDEO LUB LINKU */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-neutral-400 font-semibold">2. Nagranie wideo</label>
+                  <label className="text-neutral-400 font-semibold">3. Nagranie wideo</label>
                   <div className="flex bg-neutral-950 border border-neutral-800 rounded-lg p-0.5">
                     <button
                       type="button"
@@ -700,7 +815,7 @@ export default function TimelinePage() {
                             : "Kliknij, aby wybrać film z galerii"}
                         </span>
                         <span className="text-[10px] text-neutral-500 block">
-                          MP4 / MOV / WEBM (maks. {MAX_VIDEO_SIZE_MB} MB)
+                          MP4 / MOV / WEBM
                         </span>
                       </div>
                     )}
@@ -725,10 +840,10 @@ export default function TimelinePage() {
                 )}
               </div>
 
-              {/* 3. KOMENTARZ */}
+              {/* 4. KOMENTARZ */}
               <div>
                 <label className="text-neutral-400 block mb-1 font-semibold">
-                  3. Komentarz / Co poprawić?
+                  4. Komentarz / Co poprawić?
                 </label>
                 <textarea
                   rows={3}

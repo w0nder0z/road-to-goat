@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 interface Exercise {
@@ -35,7 +36,19 @@ interface Competition {
   location?: string;
 }
 
+interface Challenge {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: string;
+  video_url: string | null;
+  exercise_sequence: { id: string; title: string }[];
+  created_by: string;
+  created_at: string;
+}
+
 const EXERCISE_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie"];
+const STORAGE_BUCKET = "timeline-videos";
 
 const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
   Tricking: [
@@ -76,15 +89,7 @@ const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
     "Rozgrzewka / Flow",
     "Stretching / Chillout",
   ],
-  Dieta: [
-    "Wszystkie grupy",
-    "Drób / Kurczak",
-    "Mięso czerwone",
-    "Ryby / Owoce morza",
-    "Warzywa / Owoce",
-    "Węglowodany / Energia",
-    "Nawodnienie / Suplementacja",
-  ],
+  Dieta: ["Wszystkie grupy"],
   "Własne treningi": [
     "Wszystkie zestawy",
     "Tricking Session",
@@ -157,8 +162,10 @@ function calculateCompetitionPhase(dateStr: string): string {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("Tricking");
   const [activeSubcategory, setActiveSubcategory] = useState("Wszystkie podkategorie");
@@ -200,6 +207,20 @@ export default function Home() {
   const [isCompManagerOpen, setIsCompManagerOpen] = useState(false);
   const [editingCompId, setEditingCompId] = useState<string | null>(null);
   const [compForm, setCompForm] = useState({ name: "", date: "", location: "" });
+
+  // Wyzwania (Challenges)
+  const [isChallengeModalOpen, setIsChallengeModalOpen] = useState(false);
+  const [challengeForm, setChallengeForm] = useState({
+    title: "",
+    description: "",
+    difficulty: "Combo Challenge",
+    video_url: "",
+    sequence: [] as { id: string; title: string }[],
+  });
+  const [challengeSearchTerm, setChallengeSearchTerm] = useState("");
+  const [challengeUploadMode, setChallengeUploadMode] = useState<"file" | "link">("file");
+  const [challengeFile, setChallengeFile] = useState<File | null>(null);
+  const [savingChallenge, setSavingChallenge] = useState(false);
 
   const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
@@ -334,6 +355,13 @@ export default function Home() {
       .order("date", { ascending: true });
 
     if (compData) setCompetitions(compData);
+
+    const { data: chData } = await supabase
+      .from("challenges")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (chData) setChallenges(chData);
 
     setLoading(false);
   };
@@ -699,6 +727,93 @@ export default function Home() {
     return url;
   };
 
+  const isDirectVideoFile = (url: string) => {
+    return (
+      url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`) ||
+      /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url)
+    );
+  };
+
+  // Zapisywanie nowego Wyzwania
+  const handleSaveChallenge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !challengeForm.title.trim()) return;
+
+    setSavingChallenge(true);
+    let finalVideoUrl: string | null = null;
+
+    try {
+      if (challengeUploadMode === "file" && challengeFile) {
+        const fileExt = challengeFile.name.split(".").pop()?.toLowerCase() || "mp4";
+        const safeUser = currentUser.username.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const filePath = `challenges/${safeUser}_${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(filePath, challengeFile, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: challengeFile.type || "video/mp4",
+          });
+
+        if (uploadError) throw new Error("Błąd wysyłania wideo: " + uploadError.message);
+
+        const { data: publicUrlData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(filePath);
+
+        finalVideoUrl = publicUrlData.publicUrl;
+      } else if (challengeUploadMode === "link" && challengeForm.video_url.trim()) {
+        finalVideoUrl = formatUrl(challengeForm.video_url.trim());
+      }
+
+      const payload = {
+        title: challengeForm.title.trim(),
+        description: challengeForm.description.trim(),
+        difficulty: challengeForm.difficulty,
+        video_url: finalVideoUrl,
+        exercise_sequence: challengeForm.sequence,
+        created_by: currentUser.username,
+      };
+
+      const { data, error } = await supabase.from("challenges").insert([payload]).select();
+      if (error) throw new Error("Błąd zapisu wyzwania: " + error.message);
+
+      if (data && data[0]) {
+        setChallenges((prev) => [data[0], ...prev]);
+        setIsChallengeModalOpen(false);
+        setChallengeForm({
+          title: "",
+          description: "",
+          difficulty: "Combo Challenge",
+          video_url: "",
+          sequence: [],
+        });
+        setChallengeFile(null);
+        setChallengeSearchTerm("");
+        setActiveCategory("Wyzwania");
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Wystąpił błąd.");
+    } finally {
+      setSavingChallenge(false);
+    }
+  };
+
+  const handleDeleteChallenge = async (ch: Challenge) => {
+    if (!confirm(`Czy na pewno usunąć wyzwanie "${ch.title}"?`)) return;
+    if (ch.video_url && ch.video_url.includes(`/storage/v1/object/public/${STORAGE_BUCKET}/`)) {
+      const storagePath = ch.video_url.split(`/storage/v1/object/public/${STORAGE_BUCKET}/`)[1];
+      if (storagePath) {
+        await supabase.storage.from(STORAGE_BUCKET).remove([decodeURIComponent(storagePath)]);
+      }
+    }
+    const { error } = await supabase.from("challenges").delete().eq("id", ch.id);
+    if (!error) {
+      setChallenges((prev) => prev.filter((item) => item.id !== ch.id));
+    }
+  };
+
   const handleSaveExercise = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title) return;
@@ -926,6 +1041,18 @@ export default function Home() {
     });
   }, [exercises, activeCategory, activeSubcategory, activeTrickingLevel, searchTerm]);
 
+  const filteredChallenges = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return challenges;
+    return challenges.filter(
+      (ch) =>
+        ch.title.toLowerCase().includes(term) ||
+        ch.description?.toLowerCase().includes(term) ||
+        ch.created_by.toLowerCase().includes(term) ||
+        ch.exercise_sequence?.some((s) => s.title.toLowerCase().includes(term))
+    );
+  }, [challenges, searchTerm]);
+
   const isExerciseCategoryActive = EXERCISE_CATEGORIES.includes(activeCategory);
 
   return (
@@ -1143,18 +1270,22 @@ export default function Home() {
             )}
           </div>
 
-          {/* PRZYCISKI AKCJI */}
+          {/* PRZYCISKI AKCJI (DODAJ, TRENINGI, STARTY, WYZWANIA) */}
           <div className="relative z-30 flex flex-wrap items-center justify-between gap-2 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => {
                     setEditingExerciseId(null);
+                    const baseCat =
+                      activeCategory === "Własne treningi" || activeCategory === "Wyzwania"
+                        ? "Tricking"
+                        : activeCategory;
                     setFormData({
                       title: "",
-                      category: activeCategory === "Własne treningi" ? "Tricking" : activeCategory,
-                      subcategory: SUBCATEGORIES_CONFIG[activeCategory === "Własne treningi" ? "Tricking" : activeCategory][1] || "",
-                      difficulty: activeCategory === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
+                      category: baseCat,
+                      subcategory: SUBCATEGORIES_CONFIG[baseCat]?.[1] || "",
+                      difficulty: baseCat === "Tricking" ? "Lvl 1: Fundamenty" : STANDARD_DIFFICULTIES[0],
                       short_description: "",
                       description: "",
                       sources: [""],
@@ -1211,6 +1342,20 @@ export default function Home() {
                 >
                   🏆 Starty
                 </button>
+
+                <button
+                  onClick={() => {
+                    setActiveCategory("Wyzwania");
+                    setIsExerciseDropdownOpen(false);
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold flex-1 sm:flex-none text-center transition-all border ${
+                    activeCategory === "Wyzwania"
+                      ? "bg-amber-500 text-black border-amber-400 font-extrabold"
+                      : "bg-neutral-900 hover:bg-neutral-800 text-amber-300 border-amber-500/40"
+                  }`}
+                >
+                  🔥 Wyzwania ({challenges.length})
+                </button>
               </div>
             ) : (
               <div />
@@ -1232,7 +1377,6 @@ export default function Home() {
 
       {/* PASEK ZAKŁADEK I WYSZUKIWARKA */}
       <div className="max-w-6xl mx-auto px-4 md:px-8 mt-5 space-y-4">
-        {/* Bez overflow-x-auto na tym pasku, aby dropdown Bazy nie był obcinany w pionie */}
         <div className="relative z-20 flex flex-wrap items-center gap-2 pb-2 select-none border-b border-neutral-900">
           <div className="relative" ref={exerciseDropdownRef} id="tour-exercise-base">
             <button
@@ -1295,7 +1439,6 @@ export default function Home() {
             type="button"
             onClick={() => {
               setActiveCategory("Dieta");
-              setActiveSubcategory(SUBCATEGORIES_CONFIG["Dieta"][0]);
               setIsExerciseDropdownOpen(false);
             }}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
@@ -1305,6 +1448,21 @@ export default function Home() {
             }`}
           >
             🥗 Dieta
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCategory("Wyzwania");
+              setIsExerciseDropdownOpen(false);
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              activeCategory === "Wyzwania"
+                ? "bg-amber-500 text-black shadow-md shadow-amber-500/20"
+                : "bg-neutral-900 hover:bg-neutral-800 text-amber-300/90 border border-neutral-800"
+            }`}
+          >
+            🔥 Wyzwania
           </button>
 
           {currentUser && (
@@ -1326,11 +1484,15 @@ export default function Home() {
           )}
         </div>
 
-        {/* WYSZUKIWARKA (Ukryta dla Diety w trybie Work in Progress) */}
+        {/* WYSZUKIWARKA */}
         {activeCategory !== "Dieta" && (
           <input
             type="text"
-            placeholder="Szukaj tricku, ćwiczenia, elementu..."
+            placeholder={
+              activeCategory === "Wyzwania"
+                ? "Szukaj wyzwania, kombinacji lub autora..."
+                : "Szukaj tricku, ćwiczenia, elementu..."
+            }
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3.5 py-2.5 text-xs md:text-sm focus:outline-none focus:border-emerald-500 transition-colors"
@@ -1338,39 +1500,174 @@ export default function Home() {
         )}
 
         {/* PODKATEGORIE */}
-        {activeCategory !== "Własne treningi" && activeCategory !== "Dieta" && (
-          <div className="space-y-2 select-none">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-              {SUBCATEGORIES_CONFIG[activeCategory]?.map((sub) => (
-                <button
-                  key={sub}
-                  onClick={() => setActiveSubcategory(sub)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
-                    activeSubcategory === sub
-                      ? "bg-neutral-200 text-neutral-950 font-bold"
-                      : "bg-neutral-900/80 text-neutral-400 border border-neutral-800"
-                  }`}
-                >
-                  {sub}
-                </button>
-              ))}
-            </div>
-
-            {activeCategory === "Tricking" && (
+        {activeCategory !== "Własne treningi" &&
+          activeCategory !== "Dieta" &&
+          activeCategory !== "Wyzwania" && (
+            <div className="space-y-2 select-none">
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                {TRICKING_LEVELS.map((lvl) => (
+                {SUBCATEGORIES_CONFIG[activeCategory]?.map((sub) => (
                   <button
-                    key={lvl}
-                    onClick={() => setActiveTrickingLevel(lvl)}
-                    className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
-                      activeTrickingLevel === lvl
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
-                        : "bg-neutral-900/40 text-neutral-500 border border-neutral-900"
+                    key={sub}
+                    onClick={() => setActiveSubcategory(sub)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                      activeSubcategory === sub
+                        ? "bg-neutral-200 text-neutral-950 font-bold"
+                        : "bg-neutral-900/80 text-neutral-400 border border-neutral-800"
                     }`}
                   >
-                    {lvl}
+                    {sub}
                   </button>
                 ))}
+              </div>
+
+              {activeCategory === "Tricking" && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  {TRICKING_LEVELS.map((lvl) => (
+                    <button
+                      key={lvl}
+                      onClick={() => setActiveTrickingLevel(lvl)}
+                      className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                        activeTrickingLevel === lvl
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
+                          : "bg-neutral-900/40 text-neutral-500 border border-neutral-900"
+                      }`}
+                    >
+                      {lvl}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+        {/* SEKCJA WYZWANIA (CHALLENGES) */}
+        {activeCategory === "Wyzwania" && (
+          <div className="space-y-4 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-950/20 border border-amber-500/30 p-3.5 rounded-2xl">
+              <div className="text-left">
+                <h2 className="text-sm font-extrabold text-amber-300 flex items-center gap-1.5">
+                  <span>🔥</span> Wyzwania Ekipy ({filteredChallenges.length})
+                </h2>
+                <p className="text-[11px] text-neutral-400">
+                  Zaproponowane kombinacje tricków oraz trudne ćwiczenia z wideo pokazowym.
+                </p>
+              </div>
+              {currentUser && (
+                <button
+                  onClick={() => {
+                    setChallengeSearchTerm("");
+                    setChallengeFile(null);
+                    setChallengeUploadMode("file");
+                    setIsChallengeModalOpen(true);
+                  }}
+                  className="bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95"
+                >
+                  + Zaproponuj Wyzwanie
+                </button>
+              )}
+            </div>
+
+            {filteredChallenges.length === 0 ? (
+              <div className="text-center py-14 text-neutral-500 text-xs border border-neutral-900 rounded-3xl space-y-2">
+                <p className="text-neutral-300 font-semibold text-sm">Brak aktywnych wyzwań.</p>
+                <p>Dodaj pierwsze combo lub trudne ćwiczenie z filmikiem pokazowym!</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredChallenges.map((ch) => {
+                  const canDelete =
+                    currentUser?.role === "coach" ||
+                    currentUser?.username.trim().toLowerCase() ===
+                      ch.created_by.trim().toLowerCase();
+
+                  return (
+                    <div
+                      key={ch.id}
+                      className="bg-neutral-900/70 border border-amber-500/30 rounded-3xl p-4 space-y-3 text-left flex flex-col justify-between shadow-xl"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            🔥 {ch.difficulty}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-neutral-400">
+                              Autor: <strong className="text-emerald-400">{ch.created_by}</strong>
+                            </span>
+                            {canDelete && (
+                              <button
+                                onClick={() => handleDeleteChallenge(ch)}
+                                className="text-xs text-neutral-500 hover:text-red-400 px-1.5 py-0.5 bg-neutral-950 border border-neutral-800 rounded-lg"
+                              >
+                                🗑️
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <h3 className="text-base md:text-lg font-black text-white">{ch.title}</h3>
+
+                        {/* SEKWENCJA TRICKÓW W WYZWANIU */}
+                        {ch.exercise_sequence && ch.exercise_sequence.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 bg-neutral-950/80 border border-neutral-800 p-2.5 rounded-xl">
+                            {ch.exercise_sequence.map((step, idx) => (
+                              <React.Fragment key={`${step.id}-${idx}`}>
+                                <Link
+                                  href={`/exercise/${step.id}`}
+                                  className="text-[11px] font-bold bg-neutral-900 hover:border-emerald-500/50 border border-neutral-700 text-emerald-300 px-2 py-0.5 rounded-lg"
+                                >
+                                  {step.title}
+                                </Link>
+                                {idx < ch.exercise_sequence.length - 1 && (
+                                  <span className="text-amber-400 font-bold text-xs">➔</span>
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+
+                        {ch.description && (
+                          <p className="text-xs text-neutral-300 leading-relaxed">
+                            {ch.description}
+                          </p>
+                        )}
+
+                        {/* WIDEO POKAZOWE WYZWANIA */}
+                        {ch.video_url && (
+                          <div className="rounded-2xl overflow-hidden border border-neutral-800 bg-black">
+                            {isDirectVideoFile(ch.video_url) ? (
+                              <video
+                                src={ch.video_url}
+                                controls
+                                playsInline
+                                preload="metadata"
+                                className="w-full max-h-[300px] object-contain mx-auto"
+                              />
+                            ) : (
+                              <div className="aspect-video">
+                                <iframe
+                                  src={ch.video_url}
+                                  className="w-full h-full"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-neutral-800/80 flex justify-end">
+                        <button
+                          onClick={() => router.push("/timeline")}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all"
+                        >
+                          🎬 Wrzuć swoją próbę na Timeline →
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1501,8 +1798,10 @@ export default function Home() {
         )}
 
         {/* LISTA ĆWICZEŃ W BAZIE */}
-        {activeCategory !== "Własne treningi" && activeCategory !== "Dieta" && (
-          loading ? (
+        {activeCategory !== "Własne treningi" &&
+          activeCategory !== "Dieta" &&
+          activeCategory !== "Wyzwania" &&
+          (loading ? (
             <div className="text-center py-12 text-neutral-500 text-xs animate-pulse">
               Ładowanie bazy...
             </div>
@@ -1651,9 +1950,189 @@ export default function Home() {
                 );
               })}
             </div>
-          )
-        )}
+          ))}
       </div>
+
+      {/* MODAL DODAWANIA WYZWANIA */}
+      {isChallengeModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3.5 z-50">
+          <div className="bg-neutral-900 border border-amber-500/40 rounded-3xl p-5 w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto space-y-3.5 text-left">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
+              <h2 className="text-base font-bold text-amber-300">🔥 Zaproponuj Nowe Wyzwanie</h2>
+              <button
+                onClick={() => !savingChallenge && setIsChallengeModalOpen(false)}
+                className="text-neutral-400 hover:text-white text-xs px-2"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveChallenge} className="space-y-3 text-xs">
+              <div>
+                <label className="text-neutral-400 block mb-1 font-semibold">Nazwa wyzwania *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="np. Hook + TD Raiz -> Cork Challenge"
+                  value={challengeForm.title}
+                  onChange={(e) => setChallengeForm({ ...challengeForm, title: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* UKŁADANIE SEKWENCJI TRICKÓW Z WYSZUKIWARKĄ */}
+              <div className="border border-neutral-800 bg-neutral-950/70 p-3 rounded-2xl space-y-2">
+                <label className="text-amber-300 font-bold block">
+                  1. Elementy wyzwania po kolei ({challengeForm.sequence.length})
+                </label>
+
+                {challengeForm.sequence.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                    {challengeForm.sequence.map((item, idx) => (
+                      <div
+                        key={`${item.id}-${idx}`}
+                        className="inline-flex items-center gap-1 bg-amber-500/20 border border-amber-500/50 text-amber-200 px-2 py-1 rounded-lg text-[11px] font-bold"
+                      >
+                        <span>{idx + 1}. {item.title}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setChallengeForm((prev) => ({
+                              ...prev,
+                              sequence: prev.sequence.filter((_, i) => i !== idx),
+                            }))
+                          }
+                          className="text-red-400 hover:text-red-300 ml-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  placeholder="🔍 Szukaj tricku lub ćwiczenia do dodania..."
+                  value={challengeSearchTerm}
+                  onChange={(e) => setChallengeSearchTerm(e.target.value)}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+
+                <div className="max-h-28 overflow-y-auto space-y-1">
+                  {exercises
+                    .filter(
+                      (ex) =>
+                        EXERCISE_CATEGORIES.includes(ex.category) &&
+                        ex.title.toLowerCase().includes(challengeSearchTerm.toLowerCase())
+                    )
+                    .slice(0, 30)
+                    .map((ex) => (
+                      <button
+                        key={ex.id}
+                        type="button"
+                        onClick={() =>
+                          setChallengeForm((prev) => ({
+                            ...prev,
+                            sequence: [...prev.sequence, { id: ex.id, title: ex.title }],
+                          }))
+                        }
+                        className="w-full text-left p-1.5 rounded-lg hover:bg-neutral-900 text-neutral-300 text-[11px] flex items-center justify-between"
+                      >
+                        <span>+ {ex.title}</span>
+                        <span className="text-[10px] text-neutral-500">{ex.category}</span>
+                      </button>
+                    ))}
+                </div>
+              </div>
+
+              {/* WIDEO POKAZOWE */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-neutral-400 font-semibold">2. Wideo pokazowe *</label>
+                  <div className="flex bg-neutral-950 border border-neutral-800 rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setChallengeUploadMode("file")}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                        challengeUploadMode === "file" ? "bg-amber-500 text-black" : "text-neutral-400"
+                      }`}
+                    >
+                      📁 Plik wideo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChallengeUploadMode("link")}
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                        challengeUploadMode === "link" ? "bg-amber-500 text-black" : "text-neutral-400"
+                      }`}
+                    >
+                      🔗 Link YT/Drive
+                    </button>
+                  </div>
+                </div>
+
+                {challengeUploadMode === "file" ? (
+                  <label className="flex flex-col items-center justify-center w-full border-2 border-dashed border-neutral-700 hover:border-amber-500/60 bg-neutral-950/80 rounded-2xl p-3.5 cursor-pointer text-center">
+                    {challengeFile ? (
+                      <span className="text-amber-300 font-bold text-xs truncate max-w-[260px]">
+                        📹 {challengeFile.name} ({(challengeFile.size / (1024 * 1024)).toFixed(1)} MB)
+                      </span>
+                    ) : (
+                      <span className="text-neutral-300 text-xs font-semibold">
+                        Kliknij, aby wybrać wideo pokazowe z urządzenia
+                      </span>
+                    )}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => setChallengeFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <input
+                    type="url"
+                    placeholder="https://youtube.com/... lub Google Drive"
+                    value={challengeForm.video_url}
+                    onChange={(e) => setChallengeForm({ ...challengeForm, video_url: e.target.value })}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="text-neutral-400 block mb-1 font-semibold">Zasady / Opis wyzwania</label>
+                <textarea
+                  rows={2}
+                  placeholder="np. Czyste lądowanie bez podparcia, pełny swing między elementami..."
+                  value={challengeForm.description}
+                  onChange={(e) => setChallengeForm({ ...challengeForm, description: e.target.value })}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-neutral-800">
+                <button
+                  type="button"
+                  disabled={savingChallenge}
+                  onClick={() => setIsChallengeModalOpen(false)}
+                  className="px-3 py-1.5 text-neutral-400"
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingChallenge}
+                  className="bg-amber-500 hover:bg-amber-400 text-black font-extrabold px-4 py-1.5 rounded-xl"
+                >
+                  {savingChallenge ? "Publikowanie..." : "Opublikuj Wyzwanie"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL ZARZĄDZANIA ZAWODAMI */}
       {isCompManagerOpen && (
@@ -2088,7 +2567,7 @@ export default function Home() {
                     }}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-2 py-1.5 text-xs"
                   >
-                    {[...EXERCISE_CATEGORIES, "Muzyka", "Dieta"].map((cat) => (
+                    {[...EXERCISE_CATEGORIES, "Muzyka"].map((cat) => (
                       <option key={cat} value={cat}>
                         {cat}
                       </option>
