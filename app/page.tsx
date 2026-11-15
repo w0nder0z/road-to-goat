@@ -55,7 +55,6 @@ interface Challenge {
 
 const EXERCISE_CATEGORIES = ["Tricking", "Plyometria", "Siła", "Rozciąganie"];
 
-// 12 partii mięśniowych zgodnych z JEFIT + dotychczasowe kategorie
 const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
   Tricking: [
     "Wszystkie podkategorie",
@@ -88,11 +87,14 @@ const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
   ],
   Rozciąganie: [
     "Wszystkie partie",
-    "Szpagaty / Zginacze i Kulszowe",
-    "Otwarcie klatki i barków",
-    "Mobilność stawu skokowego",
-    "Mobilność bioder i miednicy",
-    "Kręgosłup (Mostki / Rotacja)",
+    "Hip (Biodra)",
+    "Knee (Kolano / Tylna taśma)",
+    "Ankle & Foot (Staw skokowy i Stopa)",
+    "Low Back (Odcinek lędźwiowy)",
+    "Back (Plecy / Odcinek piersiowy)",
+    "Shoulder (Barki)",
+    "Neck (Szyja)",
+    "Wrist & Elbow (Nadgarstek i Łokieć)",
   ],
   Muzyka: [
     "Wszystkie playlisty",
@@ -112,7 +114,6 @@ const SUBCATEGORIES_CONFIG: Record<string, string[]> = {
   ],
 };
 
-// 12 kategorii sprzętu z JEFIT
 const EQUIPMENT_LIST = [
   "Wszystki sprzęt",
   "Body Weight (Masa ciała)",
@@ -239,7 +240,6 @@ export default function Home() {
   const [editingCompId, setEditingCompId] = useState<string | null>(null);
   const [compForm, setCompForm] = useState({ name: "", date: "", location: "" });
 
-  // Wyzwania (Challenges)
   const [isChallengeModalOpen, setIsChallengeModalOpen] = useState(false);
   const [challengeForm, setChallengeForm] = useState({
     title: "",
@@ -1043,7 +1043,8 @@ export default function Home() {
       const matchesSearch =
         item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.short_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.equipment?.toLowerCase().includes(searchTerm.toLowerCase());
+        item.equipment?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.subcategory?.toLowerCase().includes(searchTerm.toLowerCase());
       if (!matchesSearch) return false;
 
       const isAllSub = activeSubcategory.startsWith("Wszystkie");
@@ -1192,7 +1193,6 @@ export default function Home() {
         </div>
 
         <div className="relative max-w-6xl mx-auto px-4 md:px-8 pt-4 pb-6 flex flex-col justify-between min-h-[300px] md:min-h-[500px]">
-          {/* GÓRNY PASEK */}
           <div className="flex items-center justify-end gap-2 w-full">
             <Link
               id="tour-timeline-btn"
@@ -1237,7 +1237,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* DÓŁ SEKCJI HERO: TYTUŁ I OPIS W LEWYM DOLNYM ROGU */}
           <div className="mt-auto pt-6 pb-2 grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
             <div id="tour-header" className="lg:col-span-2 space-y-2 text-left">
               <div className="inline-block bg-neutral-900/85 backdrop-blur-md border border-neutral-700/80 rounded-2xl px-4 py-2 shadow-lg">
@@ -1264,7 +1263,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* KAFELEK ZAWODÓW */}
             {currentUser && (
               <div
                 id="tour-competition-widget"
@@ -1311,7 +1309,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* PRZYCISKI AKCJI (DODAJ, TRENINGI, STARTY, WYZWANIA) */}
           <div className="relative z-30 flex flex-wrap items-center justify-between gap-2 pt-2">
             {currentUser ? (
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -1536,6 +1533,8 @@ export default function Home() {
                 ? "Szukaj wyzwania, kombinacji lub autora..."
                 : activeCategory === "Siła"
                 ? "Szukaj ćwiczenia siłowego, partii mięśniowej lub sprzętu (np. Barbell, Kettlebell)..."
+                : activeCategory === "Rozciąganie"
+                ? "Szukaj rozciągania lub partii (np. Pigeon, PNF, Biodra, Kostka)..."
                 : "Szukaj tricku, ćwiczenia, elementu..."
             }
             value={searchTerm}
@@ -1544,12 +1543,11 @@ export default function Home() {
           />
         )}
 
-        {/* PODKATEGORIE (12 PARTII MIĘŚNIOWYCH) I FILTR SPRZĘTU (12 KATEGORII) */}
+        {/* PODKATEGORIE I FILTR SPRZĘTU */}
         {activeCategory !== "Własne treningi" &&
           activeCategory !== "Dieta" &&
           activeCategory !== "Wyzwania" && (
             <div className="space-y-2 select-none">
-              {/* Pasek 1: Partie mięśniowe / Podkategorie */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                 {SUBCATEGORIES_CONFIG[activeCategory]?.map((sub) => (
                   <button
@@ -1566,7 +1564,6 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* Pasek 2 dla Siły: 12 kategorii sprzętu z JEFIT */}
               {activeCategory === "Siła" && (
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                   {EQUIPMENT_LIST.map((eq) => (
@@ -1585,7 +1582,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Pasek 2 dla Trickingu: Poziomy trudności */}
               {activeCategory === "Tricking" && (
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                   {TRICKING_LEVELS.map((lvl) => (
@@ -1606,7 +1602,7 @@ export default function Home() {
             </div>
           )}
 
-        {/* SEKCJA WYZWANIA (CHALLENGES) */}
+        {/* SEKCJA WYZWANIA */}
         {activeCategory === "Wyzwania" && (
           <div className="space-y-4 pt-1">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-950/20 border border-amber-500/30 p-3.5 rounded-2xl">
@@ -1757,7 +1753,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* WŁASNE TRENINGI (WIDOK) */}
+        {/* WŁASNE TRENINGI */}
         {activeCategory === "Własne treningi" && currentUser && (
           <div className="space-y-3 pt-1">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-neutral-900/40 border border-neutral-800/80 p-3 rounded-xl">
@@ -1895,7 +1891,7 @@ export default function Home() {
                   >
                     <div>
                       <div className="flex items-center justify-between gap-1.5 mb-2">
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[170px]">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-neutral-800 text-emerald-400 border border-neutral-700 truncate max-w-[175px]">
                           {item.subcategory || item.category}
                         </span>
                         <div className="flex items-center gap-1.5">
@@ -2626,7 +2622,7 @@ export default function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="np. Cheat 720 lub Barbell Back Squat..."
+                  placeholder="np. Cheat 720, Barbell Back Squat lub Couch Stretch..."
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-emerald-500"
@@ -2659,7 +2655,11 @@ export default function Home() {
 
                 <div>
                   <label className="text-neutral-400 block mb-1">
-                    {formData.category === "Siła" ? "Partia mięśniowa (12)" : "Podkategoria"}
+                    {formData.category === "Siła"
+                      ? "Partia mięśniowa (12)"
+                      : formData.category === "Rozciąganie"
+                      ? "Obszar anatomiczny"
+                      : "Podkategoria"}
                   </label>
                   <select
                     value={formData.subcategory}
